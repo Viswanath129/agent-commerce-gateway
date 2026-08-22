@@ -179,25 +179,6 @@ npm run benchmark
 ```
 
 ---
-
-## 🎬 4-Minute Hackathon Demo Script
-
-Run the automated live simulation:
-
-```bash
-npm run demo
-```
-
-| Time | Phase | Action & Visual Output | Key Takeaway |
-| :--- | :--- | :--- | :--- |
-| **0:00 - 0:45** | **1. Adversarial Interception** | Agent attempts to buy ₹14,160 chair with ₹5,000 mandate $\rightarrow$ Gateway blocks (`403 MANDATE_BUDGET_EXCEEDED`). Razorpay **NOT CALLED**. | *“The model can propose anything. It cannot authorize anything.”* |
-| **0:45 - 1:45** | **2. Golden Path Execution** | Agent submits valid intent for ₹2,124 Optical Mouse $\rightarrow$ Ed25519 verified $\rightarrow$ DB truth resolved $\rightarrow$ Razorpay Order created (`receipt = intent_id`). | Seamless autonomous commerce on Razorpay rails. |
-| **1:45 - 2:45** | **3. High-Concurrency Race** | Remaining balance is ₹2,876. Two subagents attack simultaneously with ₹2,124 carts $\rightarrow$ Agent A: `201 ALLOW`, Agent B: `409 MANDATE_EXHAUSTED`. | Dual-Resource Lock eliminates concurrent double-spend. |
-| **2:45 - 3:30** | **4. Failure & Safe Refund** | Warehouse damaged item post-capture $\rightarrow$ ACG evaluates policy $\rightarrow$ triggers idempotent refund via `X-Refund-Idempotency`. | Safe refund lifecycle; capital never leaked. |
-| **3:30 - 4:00** | **5. Cryptographic Audit & Moat** | Displays live SHA-256 hash-chain trajectory with immutable `policy_version: pol_v1.0.0`. | *“The agent decided what it wanted. The control plane decided whether it was allowed.”* |
-
----
-
 ## ⚡ Quickstart & Setup
 
 ### Prerequisites
