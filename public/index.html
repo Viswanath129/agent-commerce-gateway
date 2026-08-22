@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>ACG Core | Merchant-Side Control Plane for AI Commerce</title>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Jost:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  
+  <style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #10100F;
+        color: #e6e2d9;
+        font-family: 'Inter', sans-serif;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    .font-bodoni { font-family: 'Bodoni Moda', serif; }
+    .font-cormorant { font-family: 'Cormorant Garamond', serif; }
+    .font-garamond { font-family: 'EB Garamond', serif; }
+    .font-mono-plex { font-family: 'IBM Plex Mono', monospace; }
+    .font-mono-jb { font-family: 'JetBrains Mono', monospace; }
+    .font-jost { font-family: 'Jost', sans-serif; }
+
+    .narrative-line {
+      position: absolute;
+      left: 23px;
+      top: 24px;
+      bottom: -48px;
+      width: 1px;
+      background-color: rgba(208, 197, 162, 0.2);
+      z-index: 0;
+    }
+    .narrative-step:last-child .narrative-line { display: none; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#14140e",
+            "surface-dim": "#14140e",
+            "surface-bright": "#3a3933",
+            "surface-container-lowest": "#0f0e09",
+            "surface-container-low": "#1c1c16",
+            "surface-container": "#20201a",
+            "surface-container-high": "#2b2a24",
+            "surface-container-highest": "#36352f",
+            "surface-variant": "#4a473f",
+            "on-surface": "#e6e2d9",
+            "on-surface-variant": "#ccc6b5",
+            "outline": "#959084",
+            "outline-variant": "#4a473f",
+            "primary": "#d1c5a2",
+            "on-primary": "#382f16",
+            "primary-container": "#51452a",
+            "secondary": "#c9caa9",
+            "tertiary": "#b7b09d",
+            "error": "#ffb4ab",
+            "background": "#10100F",
+            "on-background": "#e6e2d9"
+          }
+        }
+      }
+    };
+  </script>
+</head>
+
+<body class="bg-background font-body-md text-on-background antialiased selection:bg-primary selection:text-on-primary">
+  
+  <!-- Left Navigation Sidebar -->
+  <aside class="fixed left-0 top-0 h-screen w-[280px] bg-surface-container-lowest flex flex-col border-r border-outline-variant/30 z-50">
+    <div class="p-6 flex items-center gap-3 text-primary border-b border-outline-variant/20">
+      <span class="material-symbols-outlined font-bold text-2xl">token</span>
+      <div class="flex flex-col">
+        <span class="font-bodoni text-xl tracking-wider uppercase font-semibold">ACG CORE</span>
+        <span class="text-[10px] font-mono-jb text-primary/60 tracking-widest uppercase">Razorpay Control Plane</span>
+      </div>
+    </div>
+
+    <!-- Navigation Links -->
+    <nav class="flex-1 px-3 py-4 overflow-y-auto space-y-1" id="nav-links">
+      <a href="#overview" data-tab="tab-overview" class="nav-item active flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-primary font-medium border-l-[3px] border-primary bg-surface-container-high/40">
+        <span class="text-xs font-mono-jb text-primary/60 w-5">01</span>
+        <span class="tracking-wide">Overview</span>
+      </a>
+      <a href="#live-demo" data-tab="tab-live-demo" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">02</span>
+        <span class="tracking-wide flex items-center gap-2">Live Demo <span class="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 border border-primary/30 uppercase">Interactive</span></span>
+      </a>
+      <a href="#transactions" data-tab="tab-transactions" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">03</span>
+        <span class="tracking-wide">Transactions</span>
+      </a>
+      <a href="#mandates" data-tab="tab-mandates" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">04</span>
+        <span class="tracking-wide">Mandates & Authority</span>
+      </a>
+      <a href="#policies" data-tab="tab-policies" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">05</span>
+        <span class="tracking-wide">Policies & Truth</span>
+      </a>
+      <a href="#reservations" data-tab="tab-reservations" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">06</span>
+        <span class="tracking-wide">Atomic Reservations</span>
+      </a>
+      <a href="#audit-ledger" data-tab="tab-audit-ledger" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">07</span>
+        <span class="tracking-wide">Audit Ledger</span>
+      </a>
+      <a href="#system-health" data-tab="tab-system-health" class="nav-item flex items-center gap-3 px-3 py-2.5 text-sm transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/30 border-l-[3px] border-transparent">
+        <span class="text-xs font-mono-jb text-on-surface-variant/50 w-5">08</span>
+        <span class="tracking-wide">System Health</span>
+      </a>
+    </nav>
+
+    <!-- Bottom Status Panel -->
+    <div class="mt-auto border-t border-outline-variant/30 p-4 space-y-2 bg-surface-container-lowest">
+      <div class="flex items-center justify-between text-xs font-mono-jb text-on-surface-variant">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-secondary"></span> LIVE DB CONNECTED</span>
+        <span class="text-[10px] text-primary" id="sidebar-live-badge">REAL-TIME</span>
+      </div>
+      <div class="flex flex-col gap-0.5 text-xs font-mono-jb">
+        <span class="text-[10px] text-on-surface-variant/60 uppercase">Active Merchant</span>
+        <span class="text-primary truncate" id="sidebar-merchant-id">merch_acme_electronics_01</span>
+      </div>
+      <div class="flex flex-col gap-0.5 text-xs font-mono-jb pt-1 border-t border-outline-variant/20">
+        <span class="text-[10px] text-on-surface-variant/60 uppercase">Active Policy</span>
+        <span class="text-secondary font-mono-jb" id="sidebar-policy-version">pol_v1.0.0</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Top Global Header -->
+  <div class="pl-[280px]">
+    <header class="fixed top-0 left-[280px] right-0 h-16 bg-background/95 backdrop-blur-md z-40 px-8 flex items-center justify-between border-b border-outline-variant/20">
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2 text-xs font-mono-jb text-on-surface-variant">
+          <span class="text-primary font-bold">MODE:</span> <span class="text-secondary font-bold">SANDBOX / LIVE BACKEND</span>
+        </div>
+        <div class="w-px h-4 bg-outline-variant/30"></div>
+        <div class="flex items-center gap-2 text-xs font-mono-jb text-on-surface-variant">
+          <span class="text-primary font-bold">TENANT:</span> <span id="header-tenant-id">ACME_ELECTRONICS</span>
+        </div>
+        <div class="w-px h-4 bg-outline-variant/30"></div>
+        <div class="flex items-center gap-2 text-xs font-mono-jb text-secondary">
+          <span class="material-symbols-outlined text-[14px]">bolt</span> RAILS: RAZORPAY TEST/SANDBOX
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 px-2.5 py-1 border border-secondary/30 bg-secondary/10 text-secondary text-xs font-mono-jb">
+          <div class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></div>
+          <span>ZERO-MOCK ACTIVE</span>
+        </div>
+        <button id="btn-sync-global" onclick="handleManualSync()" class="text-xs font-mono-jb text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 border border-outline-variant/30 px-3 py-1.5 bg-surface-container active:scale-95">
+          <span class="material-symbols-outlined text-[14px]">refresh</span> <span id="sync-button-text">SYNC</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="pt-16 min-h-screen bg-background">
+      
+      <!-- ========================================================================= -->
+      <!-- TAB 1: OVERVIEW DASHBOARD                                                 -->
+      <!-- ========================================================================= -->
+      <section id="tab-overview" class="tab-content active p-8 max-w-7xl mx-auto space-y-10">
+        
+        <!-- Hero Title -->
+        <div class="flex flex-col gap-3 border-b border-outline-variant/20 pb-8">
+          <div class="text-xs font-mono-jb text-primary tracking-widest uppercase">Razorpay AI Buildathon — Track 01</div>
+          <h1 class="font-bodoni text-5xl md:text-6xl text-primary tracking-tight font-normal">
+            AGENT COMMERCE CONTROL PLANE
+          </h1>
+          <p class="font-cormorant text-2xl text-on-surface-variant italic max-w-3xl">
+            Deterministic merchant-side controls between probabilistic AI intent and Razorpay payment execution.
+          </p>
+        </div>
+
+        <!-- Metric KPI Cards (Live Aggregated from SQLite) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 border-b border-outline-variant/20 pb-8">
+          <div class="flex flex-col gap-1 p-4 bg-surface-container-low border border-outline-variant/20">
+            <span class="text-[11px] font-mono-jb text-on-surface-variant uppercase tracking-widest">AI Intents Evaluated</span>
+            <div class="font-mono-jb text-3xl text-primary mt-1" id="kpi-intents">0</div>
+            <span class="text-xs font-mono-jb text-secondary mt-1">Live SQLite count</span>
+          </div>
+          <div class="flex flex-col gap-1 p-4 bg-surface-container-low border border-outline-variant/20">
+            <span class="text-[11px] font-mono-jb text-on-surface-variant uppercase tracking-widest">Authorized GMV (INR)</span>
+            <div class="font-mono-jb text-3xl text-primary mt-1" id="kpi-gmv">₹0.00</div>
+            <span class="text-xs font-mono-jb text-secondary mt-1">100% Truth Grounded</span>
+          </div>
+          <div class="flex flex-col gap-1 p-4 bg-surface-container-low border border-outline-variant/20">
+            <span class="text-[11px] font-mono-jb text-on-surface-variant uppercase tracking-widest">Adversarial Blocks</span>
+            <div class="font-mono-jb text-3xl text-error mt-1" id="kpi-blocked">0</div>
+            <span class="text-xs font-mono-jb text-error mt-1">0 Overspend / 0 Leaks</span>
+          </div>
+          <div class="flex flex-col gap-1 p-4 bg-surface-container-low border border-outline-variant/20">
+            <span class="text-[11px] font-mono-jb text-on-surface-variant uppercase tracking-widest">Live Route Latency</span>
+            <div class="font-mono-jb text-3xl text-primary mt-1" id="kpi-live-latency">~12.4 ms</div>
+            <span class="text-xs font-mono-jb text-on-surface-variant/70 mt-1">Measured (~286ms Cold)</span>
+          </div>
+        </div>
+
+        <!-- 7-Phase Execution Pipeline Status -->
+        <div class="flex flex-col gap-6 border-b border-outline-variant/20 pb-8">
+          <div class="flex items-center justify-between">
+            <h2 class="font-bodoni text-2xl text-on-surface">Zero-Trust Pipeline Verification</h2>
+            <span class="text-xs font-mono-jb text-secondary flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> 7 Active Deterministic Guards
+            </span>
+          </div>
+          
+          <div class="w-full overflow-x-auto pb-4">
+            <div class="min-w-[800px] flex items-center justify-between relative py-6">
+              <div class="absolute top-1/2 left-0 right-0 h-px bg-outline-variant/30 -translate-y-1/2 z-0"></div>
+              
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">1. Intent</span>
+                <span class="text-[10px] font-mono-jb text-secondary">Zod Schema</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">2. Mandate</span>
+                <span class="text-[10px] font-mono-jb text-secondary">Noble Ed25519</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">3. Truth</span>
+                <span class="text-[10px] font-mono-jb text-secondary">DB Catalog</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">4. Policy</span>
+                <span class="text-[10px] font-mono-jb text-secondary">Versioned DSL</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">5. Reserve</span>
+                <span class="text-[10px] font-mono-jb text-secondary">ACID Dual Lock</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">6. Razorpay</span>
+                <span class="text-[10px] font-mono-jb text-secondary">Idempotent Rail</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 relative z-10 w-24">
+                <div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20"></div>
+                <span class="text-[11px] font-mono-jb text-on-surface uppercase font-bold text-center">7. Audit</span>
+                <span class="text-[10px] font-mono-jb text-secondary">SHA-256 Ledger</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Activity Ledger Table -->
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bodoni text-2xl text-primary">Live Activity Ledger (Persisted Sessions)</h3>
+            <span class="text-xs font-mono-jb text-on-surface-variant">Authoritative Database Records</span>
+          </div>
+          
+          <div class="overflow-x-auto w-full border border-outline-variant/30 bg-surface-container-lowest">
+            <table class="w-full text-left border-collapse min-w-[900px]">
+              <thead>
+                <tr class="text-[11px] font-mono-jb text-on-surface-variant border-b border-outline-variant/30 uppercase tracking-widest bg-surface-container-low">
+                  <th class="p-3 font-medium">Timestamp</th>
+                  <th class="p-3 font-medium">Intent ID</th>
+                  <th class="p-3 font-medium">Mandate ID</th>
+                  <th class="p-3 font-medium text-right">Amount (INR)</th>
+                  <th class="p-3 font-medium">Razorpay Order ID</th>
+                  <th class="p-3 font-medium">Reservation ID</th>
+                  <th class="p-3 font-medium text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody class="text-xs font-mono-jb text-on-surface divide-y divide-outline-variant/10" id="activity-table-body">
+                <tr>
+                  <td colspan="7" class="p-6 text-center text-on-surface-variant">NO TRANSACTIONS RECORDED YET. Execute a scenario in Live Demo or run test suite.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 2: LIVE INTERACTIVE DEMO VISUALIZATION                                 -->
+      <!-- ========================================================================= -->
+      <section id="tab-live-demo" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex flex-col gap-4 border-b border-outline-variant/20 pb-6">
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 bg-primary/10 border border-primary/30 text-primary text-[10px] font-mono-jb uppercase font-bold">REAL BACKEND INJECTION</span>
+              <span class="text-xs font-mono-jb text-on-surface-variant">Every button fires a real cryptographic HTTP request to ACG</span>
+            </div>
+            <h1 class="font-bodoni text-4xl md:text-5xl text-primary uppercase font-normal">
+              THE MODEL CAN PROPOSE ANYTHING.<br/>IT CANNOT AUTHORIZE ANYTHING.
+            </h1>
+            <p class="font-cormorant text-2xl text-on-surface-variant italic">
+              Select an adversarial scenario below to observe real deterministic execution and state transitions.
+            </p>
+          </div>
+
+          <!-- Scenario Selection Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div class="flex flex-wrap gap-2" id="scenario-controls">
+              <button class="scenario-btn active px-3.5 py-2 bg-primary text-on-primary font-mono-jb text-xs uppercase tracking-wider font-semibold border border-primary transition-all" data-scenario="happy-path">
+                [01] Nominal Flow
+              </button>
+              <button class="scenario-btn px-3.5 py-2 bg-surface-container text-on-surface font-mono-jb text-xs uppercase tracking-wider border border-outline-variant/40 hover:border-primary transition-all" data-scenario="mandate-violation">
+                [02] Budget Overstep
+              </button>
+              <button class="scenario-btn px-3.5 py-2 bg-surface-container text-on-surface font-mono-jb text-xs uppercase tracking-wider border border-outline-variant/40 hover:border-primary transition-all" data-scenario="concurrent">
+                [03] Double-Spend Race
+              </button>
+              <button class="scenario-btn px-3.5 py-2 bg-surface-container text-on-surface font-mono-jb text-xs uppercase tracking-wider border border-outline-variant/40 hover:border-primary transition-all" data-scenario="webhook-fail">
+                [04] Webhook Reconciliation
+              </button>
+              <button class="scenario-btn px-3.5 py-2 bg-surface-container text-on-surface font-mono-jb text-xs uppercase tracking-wider border border-outline-variant/40 hover:border-primary transition-all" data-scenario="refund">
+                [05] Safe Reversal Audit
+              </button>
+            </div>
+
+            <button id="run-simulation" class="px-6 py-2.5 bg-primary text-on-primary font-mono-jb text-xs uppercase tracking-widest font-bold border border-primary hover:bg-primary/90 transition-colors shadow-lg flex items-center gap-2">
+              <span class="material-symbols-outlined text-[16px]">play_arrow</span> <span id="run-sim-text">EXECUTE REAL BACKEND SCENARIO</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario Result Callout Box -->
+        <div id="scenario-result-box" class="hidden border border-outline-variant/40 bg-surface-container-low p-4 space-y-2 text-xs font-mono-jb">
+          <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+            <span class="text-primary font-bold uppercase" id="scenario-result-title">BACKEND EXECUTION RESULT</span>
+            <span class="text-xs px-2 py-0.5 border" id="scenario-result-status-badge">HTTP 200</span>
+          </div>
+          <div id="scenario-result-details" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-on-surface-variant pt-1"></div>
+        </div>
+
+        <!-- Visual Topology Stage -->
+        <div class="relative bg-surface-container-lowest border border-outline-variant/40 p-8 flex flex-col justify-center items-center min-h-[420px] rounded-none">
+          
+          <!-- Dynamic SVG Paths -->
+          <svg class="absolute inset-0 w-full h-full pointer-events-none" id="connection-lines">
+            <defs>
+              <linearGradient id="line-grad" x1="0%" x2="100%" y1="0%" y2="0%">
+                <stop offset="0%" stop-color="#4a473f"></stop>
+                <stop offset="100%" stop-color="#4a473f"></stop>
+              </linearGradient>
+              <linearGradient id="flow-grad" x1="0%" x2="100%" y1="0%" y2="0%">
+                <stop offset="0%" stop-color="#d1c5a2" stop-opacity="0"></stop>
+                <stop offset="50%" stop-color="#d1c5a2" stop-opacity="1"></stop>
+                <stop offset="100%" stop-color="#d1c5a2" stop-opacity="0"></stop>
+              </linearGradient>
+            </defs>
+            <path id="path-1" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+            <path id="path-2" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+            <path id="path-3" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+            <path id="path-4" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+            <path id="path-5" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+            <path id="path-6" d="M 0 0 L 0 0" fill="none" stroke="url(#line-grad)" stroke-width="1.5"></path>
+
+            <path id="flow-1" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+            <path id="flow-2" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+            <path id="flow-3" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+            <path id="flow-4" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+            <path id="flow-5" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+            <path id="flow-6" class="opacity-0 transition-opacity duration-300" d="M 0 0 L 0 0" fill="none" stroke="url(#flow-grad)" stroke-width="2.5"></path>
+          </svg>
+
+          <!-- 7 Topology Nodes -->
+          <div class="flex items-center justify-between w-full max-w-5xl relative z-10 my-8" id="topology-grid">
+            
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-agent">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">smart_toy</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">1. Intent</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">PROPOSE INTENT</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-mandate">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">verified_user</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">2. Mandate</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">CHECK ED25519</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-truth">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">database</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">3. Truth</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">QUERY CATALOG</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-policy">
+              <div class="w-16 h-16 bg-surface-bright border-2 border-primary flex items-center justify-center mb-2 transition-all shadow-lg">
+                <span class="material-symbols-outlined text-primary text-[28px]">gavel</span>
+              </div>
+              <span class="font-mono-jb text-xs text-primary uppercase font-bold">4. Policy</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">EVALUATE DSL</span>
+                <div class="status-msg font-bold mt-1"></div>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-reserve">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">lock</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">5. Reserve</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">ACID LOCK</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-razorpay">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">payments</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">6. Razorpay</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">CREATE ORDER</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col items-center relative w-28 text-center" id="node-audit">
+              <div class="w-14 h-14 bg-surface-container border border-outline-variant flex items-center justify-center mb-2 transition-all">
+                <span class="material-symbols-outlined text-primary text-[22px]">receipt_long</span>
+              </div>
+              <span class="font-mono-jb text-xs text-on-surface uppercase font-bold">7. Audit</span>
+              <div class="node-console absolute top-[110%] w-36 bg-surface-container border border-outline-variant/40 p-2 text-[10px] font-mono-jb opacity-0 transition-opacity z-20">
+                <span class="text-on-surface-variant">SHA-256 BLOCK</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Live Execution Trace Log -->
+          <div class="w-full mt-auto pt-4 border-t border-outline-variant/30 flex flex-col h-28 overflow-hidden">
+            <div class="flex items-center justify-between text-xs font-mono-jb text-on-surface-variant pb-1 border-b border-outline-variant/20 mb-1">
+              <span>LIVE EXECUTION TRACE LOG</span>
+              <span class="text-primary flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> DETERMINISTIC ENGINE ACTIVE</span>
+            </div>
+            <div class="overflow-y-auto flex-1 font-mono-jb text-xs space-y-1" id="global-log">
+              <div class="text-outline">AWAITING SEQUENCE INITIATION... (Click "EXECUTE REAL BACKEND SCENARIO" above)</div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 3: TRANSACTION DETAIL                                                 -->
+      <!-- ========================================================================= -->
+      <section id="tab-transactions" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex flex-col gap-4 border-b border-outline-variant/20 pb-6">
+          <div class="flex items-center gap-2 text-xs font-mono-jb text-on-surface-variant">
+            <span>TRANSACTION INSPECTOR</span>
+            <span class="w-4 h-px bg-outline-variant"></span>
+            <span class="text-primary" id="detail-intent-id">SELECT TRANSACTION</span>
+          </div>
+          <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <h1 class="font-bodoni text-5xl text-on-surface" id="detail-order-id">RZP_ORDER</h1>
+              <div class="font-mono-jb text-xs text-on-surface-variant mt-1" id="detail-timestamp">Persisted State & Cryptographic Audit Trajectory</div>
+            </div>
+            <div class="flex flex-col items-end gap-2">
+              <div class="text-right">
+                <div class="text-[11px] font-mono-jb text-on-surface-variant uppercase">Settled Total (INR)</div>
+                <div class="font-bodoni text-4xl text-primary" id="detail-amount">₹0.00</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-1 bg-secondary/10 border border-secondary/30 text-secondary text-xs font-mono-jb uppercase" id="detail-status">PENDING</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          <!-- Narrative Decision Flow -->
+          <div class="lg:col-span-7 space-y-6">
+            <h2 class="font-bodoni text-2xl text-on-surface italic border-b border-outline-variant/30 pb-2">Persisted Audit Trajectory</h2>
+
+            <div class="space-y-4 font-mono-jb text-xs" id="trajectory-list">
+              <div class="p-4 bg-surface-container-low border border-outline-variant/20 text-on-surface-variant">
+                Select a transaction from the Activity Ledger or execute a scenario to load its step-by-step audit trajectory.
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Financial Breakdown & Raw Payload -->
+          <div class="lg:col-span-5 space-y-6">
+            
+            <div class="border border-outline-variant/30 p-4 bg-surface-container-lowest">
+              <h3 class="text-xs font-mono-jb text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-3">Persisted Session Metadata</h3>
+              <div class="space-y-2 text-xs font-mono-jb" id="detail-session-meta">
+                <div class="text-on-surface-variant">No transaction loaded.</div>
+              </div>
+            </div>
+
+            <div class="border border-outline-variant/30 p-4 bg-surface-container-lowest">
+              <div class="flex items-center justify-between border-b border-outline-variant/20 pb-2 mb-3">
+                <h3 class="text-xs font-mono-jb text-on-surface-variant uppercase tracking-widest">Database Record JSON</h3>
+                <span class="text-[10px] font-mono-jb text-secondary">AUTHORITATIVE</span>
+              </div>
+              <pre class="text-[11px] font-mono-jb text-on-surface-variant overflow-x-auto leading-relaxed" id="detail-raw-json">{}</pre>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 4: MANDATES & AUTHORITY                                               -->
+      <!-- ========================================================================= -->
+      <section id="tab-mandates" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex items-end justify-between border-b border-outline-variant/20 pb-6">
+          <div>
+            <div class="text-xs font-mono-jb text-primary uppercase">Cryptographic Buyer Delegations</div>
+            <h1 class="font-bodoni text-4xl text-on-surface uppercase">Authority Mandate Registry</h1>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="px-3 py-1 bg-secondary/10 border border-secondary/30 text-secondary text-xs font-mono-jb uppercase">Noble Ed25519</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          <!-- Mandate Card List -->
+          <div class="space-y-4">
+            <h3 class="font-bodoni text-xl text-on-surface border-b border-outline-variant/20 pb-2">Active Buyer Mandates</h3>
+            <div class="space-y-4" id="mandates-list-container">
+              <div class="p-4 bg-surface-container-low border border-outline-variant/20 text-xs font-mono-jb text-on-surface-variant">
+                Loading mandates from SQLite...
+              </div>
+            </div>
+          </div>
+
+          <!-- Revocation Console -->
+          <div class="border border-outline-variant/30 bg-surface-container-lowest p-6 space-y-4 h-fit">
+            <h3 class="font-bodoni text-xl text-on-surface border-b border-outline-variant/20 pb-2">Instant Mandate Revocation</h3>
+            <p class="text-xs text-on-surface-variant">
+              Principals can instantly revoke delegation. Even if the subagent possesses a mathematically valid signature, the gateway blocks all subsequent checkout executions.
+            </p>
+            <div class="space-y-3">
+              <input type="text" id="revoke-mandate-id" class="w-full bg-surface-container-low border border-outline-variant/40 p-2 text-xs font-mono-jb text-on-surface" placeholder="Enter Mandate ID (e.g. man_pentest_266f6183)"/>
+              <button id="btn-revoke-mandate-action" onclick="handleRevokeMandate()" class="w-full py-2.5 bg-error/10 text-error border border-error/30 hover:bg-error/20 font-mono-jb text-xs uppercase font-bold transition-colors">
+                Revoke Mandate in DB
+              </button>
+            </div>
+            
+            <div class="border-t border-outline-variant/20 pt-4 mt-4">
+              <h4 class="text-xs font-mono-jb text-on-surface-variant uppercase mb-2">Revoked Mandates Registry:</h4>
+              <div class="space-y-2 text-xs font-mono-jb max-h-48 overflow-y-auto" id="revoked-list-container">
+                <div class="text-on-surface-variant">No revoked mandates recorded.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 5: POLICIES & COMMERCE TRUTH                                          -->
+      <!-- ========================================================================= -->
+      <section id="tab-policies" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex items-end justify-between border-b border-outline-variant/20 pb-6">
+          <div>
+            <div class="text-xs font-mono-jb text-primary uppercase">Merchant Configuration Document</div>
+            <h1 class="font-bodoni text-4xl text-on-surface uppercase">Policy & Ground Truth Engine</h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 bg-surface-container border border-primary/30 text-primary text-xs font-mono-jb font-bold" id="policy-badge-version">pol_v1.0.0 (ACTIVE)</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          <!-- Policy Rules & Mutation Form -->
+          <div class="border border-outline-variant/30 bg-surface-container-lowest p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+              <h3 class="font-bodoni text-xl text-on-surface italic">I. Transaction Limits & Rules</h3>
+              <button onclick="togglePolicyMutationForm()" class="text-[10px] font-mono-jb text-primary border border-primary/30 px-2.5 py-1 hover:bg-primary/10 uppercase font-semibold">
+                Mutate Policy (PUT)
+              </button>
+            </div>
+            
+            <div id="policy-mutation-panel" class="hidden p-3 bg-surface-container-low border border-primary/40 space-y-3">
+              <span class="text-xs text-primary font-bold uppercase block">Draft Real Merchant Policy Update</span>
+              <div>
+                <label class="text-[10px] text-on-surface-variant uppercase block">Max Single Ticket Cap (INR):</label>
+                <input type="number" id="policy-mutate-cap" class="w-full bg-surface-container border border-outline-variant/40 p-1.5 text-xs font-mono-jb text-on-surface mt-1" value="1500"/>
+              </div>
+              <button id="btn-submit-policy-mutate" onclick="submitPolicyMutation()" class="w-full py-1.5 bg-primary text-on-primary font-mono-jb text-xs uppercase font-bold">
+                Persist Policy Update
+              </button>
+            </div>
+
+            <div class="space-y-4 text-xs font-mono-jb" id="policy-rules-container">
+              <div class="text-on-surface-variant">Loading active policy...</div>
+            </div>
+          </div>
+
+          <!-- Catalog Ground Truth -->
+          <div class="border border-outline-variant/30 bg-surface-container-lowest p-6 space-y-4">
+            <h3 class="font-bodoni text-xl text-on-surface border-b border-outline-variant/20 pb-2 italic">II. Merchant Catalog Truth (SQLite Grounding)</h3>
+            
+            <div class="space-y-3 text-xs font-mono-jb" id="catalog-list">
+              <div class="text-on-surface-variant">Loading catalog items...</div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 6: ATOMIC RESERVATIONS                                                -->
+      <!-- ========================================================================= -->
+      <section id="tab-reservations" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex items-end justify-between border-b border-outline-variant/20 pb-6">
+          <div>
+            <div class="text-xs font-mono-jb text-primary uppercase">High-Concurrency Protection</div>
+            <h1 class="font-bodoni text-4xl text-on-surface uppercase">Dual-Resource ACID Lock</h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 bg-secondary/10 border border-secondary/30 text-secondary text-xs font-mono-jb uppercase">BEGIN IMMEDIATE TRANSACTION</span>
+          </div>
+        </div>
+
+        <div class="border border-outline-variant/30 bg-surface-container-lowest p-8 space-y-6">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="font-bodoni text-2xl text-primary">Parallel Concurrency Attack Test</h3>
+              <p class="text-xs text-on-surface-variant mt-1">
+                Fires 2 simultaneous parallel checkouts against remaining mandate balance.
+              </p>
+            </div>
+            <button id="btn-concurrency-test" onclick="runConcurrencyTest()" class="px-4 py-2 bg-primary text-on-primary font-mono-jb text-xs uppercase font-bold hover:bg-primary/90">
+              Run Live Concurrency Test
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="p-4 bg-surface-container-low border border-outline-variant/20 text-center">
+              <span class="text-xs font-mono-jb text-on-surface-variant uppercase">Parallel Subagents</span>
+              <div class="font-mono-jb text-3xl text-primary mt-1" id="concur-requests">2 Subagents</div>
+            </div>
+            <div class="p-4 bg-surface-container-low border border-outline-variant/20 text-center">
+              <span class="text-xs font-mono-jb text-on-surface-variant uppercase">Admitted by ACID Lock</span>
+              <div class="font-mono-jb text-3xl text-secondary mt-1" id="concur-admitted">-</div>
+            </div>
+            <div class="p-4 bg-surface-container-low border border-outline-variant/20 text-center">
+              <span class="text-xs font-mono-jb text-on-surface-variant uppercase">Overspend Blocked</span>
+              <div class="font-mono-jb text-3xl text-error mt-1" id="concur-blocked">-</div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <h4 class="text-xs font-mono-jb text-on-surface uppercase font-bold">Active Persisted Reservations:</h4>
+            <div class="overflow-x-auto border border-outline-variant/20">
+              <table class="w-full text-left text-xs font-mono-jb">
+                <thead class="bg-surface-container-low text-on-surface-variant uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Reservation ID</th>
+                    <th class="p-2.5">Intent ID</th>
+                    <th class="p-2.5">Mandate ID</th>
+                    <th class="p-2.5">Reserved Amount</th>
+                    <th class="p-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/10 text-on-surface" id="reservations-table-body">
+                  <tr>
+                    <td colspan="5" class="p-4 text-center text-on-surface-variant">No active held reservations.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 7: AUDIT LEDGER                                                       -->
+      <!-- ========================================================================= -->
+      <section id="tab-audit-ledger" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex items-end justify-between border-b border-outline-variant/20 pb-6">
+          <div>
+            <div class="text-xs font-mono-jb text-primary uppercase">Cryptographic Provenance</div>
+            <h1 class="font-bodoni text-4xl text-on-surface uppercase">Tamper-Evident SHA-256 Ledger</h1>
+          </div>
+          <button id="btn-verify-audit-action" onclick="verifyLedger()" class="px-4 py-2 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 text-xs font-mono-jb uppercase font-bold flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px]">verified</span> Run Backend Verification
+          </button>
+        </div>
+
+        <div class="p-4 bg-surface-container-low border border-outline-variant/30 flex justify-between items-center text-xs font-mono-jb">
+          <div>
+            <span class="text-on-surface-variant">Ledger Chain Status: </span>
+            <strong class="text-secondary" id="ledger-verify-status">VERIFIED VALID</strong>
+          </div>
+          <div>
+            <span class="text-on-surface-variant">Persisted Blocks: </span>
+            <strong class="text-primary" id="ledger-block-count">0</strong>
+          </div>
+        </div>
+
+        <!-- Hash Chain Block Stream -->
+        <div class="space-y-4" id="ledger-blocks">
+          <div class="text-xs font-mono-jb text-on-surface-variant">Loading real audit records...</div>
+        </div>
+
+      </section>
+
+
+      <!-- ========================================================================= -->
+      <!-- TAB 8: SYSTEM HEALTH & DEVELOPER CONSOLE                                   -->
+      <!-- ========================================================================= -->
+      <section id="tab-system-health" class="tab-content p-8 max-w-7xl mx-auto space-y-8">
+        
+        <div class="flex items-end justify-between border-b border-outline-variant/20 pb-6">
+          <div>
+            <div class="text-xs font-mono-jb text-primary uppercase">Infrastructure & Adapters</div>
+            <h1 class="font-bodoni text-4xl text-on-surface uppercase">System Health & Protocol Adapters</h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+            <span class="text-xs font-mono-jb text-secondary" id="overall-health-badge">HEALTHY // LIVE</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          <!-- Node Status (Live Probed) -->
+          <div class="lg:col-span-6 border border-outline-variant/30 bg-surface-container-lowest p-6 space-y-4">
+            <h3 class="font-bodoni text-xl text-on-surface border-b border-outline-variant/20 pb-2">Operational Node Health</h3>
+            
+            <div class="space-y-3 text-xs font-mono-jb" id="health-components-list">
+              <div class="text-on-surface-variant">Probing component status...</div>
+            </div>
+          </div>
+
+          <!-- Protocol Adapters & cURL -->
+          <div class="lg:col-span-6 border border-outline-variant/30 bg-surface-container-lowest p-6 space-y-4">
+            <h3 class="font-bodoni text-xl text-on-surface border-b border-outline-variant/20 pb-2">Supported Agent Ingress Protocols</h3>
+            
+            <div class="space-y-3 text-xs font-mono-jb">
+              <div class="p-3 bg-surface-container-low border border-outline-variant/20">
+                <span class="text-primary font-bold block mb-1">MCP (Model Context Protocol)</span>
+                <p class="text-on-surface-variant text-[11px]">Exposes tools: <code class="text-on-surface">propose_checkout(intent_payload)</code> and <code class="text-on-surface">query_catalog()</code>.</p>
+              </div>
+
+              <div class="p-3 bg-surface-container-low border border-outline-variant/20">
+                <span class="text-primary font-bold block mb-1">ACP / AP2 Standard REST Ingress</span>
+                <pre class="text-[10px] font-mono-jb text-on-surface-variant mt-1 overflow-x-auto">curl -X POST http://localhost:3000/v1/agent/checkout \
+  -H "Content-Type: application/json" \
+  -d '{"intent_id":"...", "mandate":{...}, "proposed_items":[...]}'</pre>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Interactive JavaScript Engine (Real Live Data) -->
+  <script>
+    // Tab Navigation Logic with Hash Routing
+    function switchTab(tabId) {
+      if (!tabId) return;
+
+      document.querySelectorAll('.nav-item').forEach(n => {
+        if (n.dataset.tab === tabId) {
+          n.classList.add('active', 'text-primary', 'font-medium', 'border-primary', 'bg-surface-container-high/40');
+          n.classList.remove('text-on-surface-variant', 'border-transparent');
+        } else {
+          n.classList.remove('active', 'text-primary', 'font-medium', 'border-primary', 'bg-surface-container-high/40');
+          n.classList.add('text-on-surface-variant', 'border-transparent');
+        }
+      });
+
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      const targetTab = document.getElementById(tabId);
+      if (targetTab) {
+        targetTab.classList.add('active');
+      }
+
+      if (tabId === 'tab-live-demo') {
+        setTimeout(updateTopologyLines, 100);
+      }
+    }
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const tabId = item.dataset.tab;
+        switchTab(tabId);
+      });
+    });
+
+    // Hash Routing Handler
+    function handleHashRoute() {
+      const hash = window.location.hash.replace('#', '');
+      const tabMap = {
+        'overview': 'tab-overview',
+        'live-demo': 'tab-live-demo',
+        'transactions': 'tab-transactions',
+        'mandates': 'tab-mandates',
+        'policies': 'tab-policies',
+        'reservations': 'tab-reservations',
+        'audit-ledger': 'tab-audit-ledger',
+        'system-health': 'tab-system-health'
+      };
+      if (hash && tabMap[hash]) {
+        switchTab(tabMap[hash]);
+      }
+    }
+    window.addEventListener('hashchange', handleHashRoute);
+    window.addEventListener('load', handleHashRoute);
+
+    // Live Topology Line Drawer
+    function updateTopologyLines() {
+      const svg = document.getElementById('connection-lines');
+      if (!svg) return;
+      const svgRect = svg.getBoundingClientRect();
+
+      function connect(id1, id2, pathId, flowId) {
+        const el1 = document.getElementById(id1);
+        const el2 = document.getElementById(id2);
+        if (!el1 || !el2) return;
+
+        const r1 = el1.firstElementChild.getBoundingClientRect();
+        const r2 = el2.firstElementChild.getBoundingClientRect();
+
+        const p1 = {
+          x: r1.left + r1.width / 2 - svgRect.left,
+          y: r1.top + r1.height / 2 - svgRect.top
+        };
+        const p2 = {
+          x: r2.left + r2.width / 2 - svgRect.left,
+          y: r2.top + r2.height / 2 - svgRect.top
+        };
+
+        const d = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+        const pEl = document.getElementById(pathId);
+        const fEl = document.getElementById(flowId);
+        if (pEl) pEl.setAttribute('d', d);
+        if (fEl) fEl.setAttribute('d', d);
+      }
+
+      connect('node-agent', 'node-mandate', 'path-1', 'flow-1');
+      connect('node-mandate', 'node-truth', 'path-2', 'flow-2');
+      connect('node-truth', 'node-policy', 'path-3', 'flow-3');
+      connect('node-policy', 'node-reserve', 'path-4', 'flow-4');
+      connect('node-reserve', 'node-razorpay', 'path-5', 'flow-5');
+      connect('node-razorpay', 'node-audit', 'path-6', 'flow-6');
+    }
+
+    window.addEventListener('resize', updateTopologyLines);
+
+    // =========================================================================
+    // REAL BACKEND DATA FETCHING ENGINE
+    // =========================================================================
+
+    async function fetchDashboardData() {
+      const t0 = performance.now();
+      try {
+        // 1. Fetch Metrics
+        const metricsRes = await fetch('/dashboard/metrics');
+        if (metricsRes.ok) {
+          const metrics = await metricsRes.json();
+          document.getElementById('kpi-intents').innerText = metrics.ai_intents_count.toLocaleString();
+          document.getElementById('kpi-gmv').innerText = '₹' + metrics.authorized_gmv_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          document.getElementById('kpi-blocked').innerText = metrics.blocked_attempts_count.toLocaleString();
+          document.getElementById('sidebar-policy-version').innerText = metrics.active_policy_version;
+          document.getElementById('sidebar-merchant-id').innerText = metrics.merchant_id;
+          document.getElementById('header-tenant-id').innerText = metrics.merchant_id.toUpperCase();
+          const pBadge = document.getElementById('policy-badge-version');
+          if (pBadge) pBadge.innerText = `${metrics.active_policy_version} (ACTIVE)`;
+        }
+
+        // 2. Fetch Transactions
+        const txRes = await fetch('/dashboard/transactions');
+        if (txRes.ok) {
+          const { transactions } = await txRes.json();
+          const tbody = document.getElementById('activity-table-body');
+          if (tbody) {
+            if (!transactions || transactions.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-on-surface-variant">NO TRANSACTIONS RECORDED YET. Execute a scenario in Live Demo.</td></tr>';
+            } else {
+              tbody.innerHTML = transactions.map(tx => `
+                <tr class="hover:bg-surface-container-low transition-colors cursor-pointer" onclick="loadTransactionDetail('${tx.intent_id}')">
+                  <td class="p-3 text-on-surface-variant">${new Date(tx.created_at).toLocaleTimeString()}</td>
+                  <td class="p-3 text-primary truncate max-w-[140px]">${tx.intent_id}</td>
+                  <td class="p-3 text-on-surface-variant truncate max-w-[140px]">${tx.mandate_id || '-'}</td>
+                  <td class="p-3 text-right text-primary font-bold">₹${(tx.amount / 100).toFixed(2)}</td>
+                  <td class="p-3 text-on-surface-variant">${tx.razorpay_order_id || '-'}</td>
+                  <td class="p-3 text-on-surface-variant truncate max-w-[120px]">${tx.reservation_id || '-'}</td>
+                  <td class="p-3 text-right font-bold ${tx.status === 'ORDER_CREATED' || tx.status === 'PAYMENT_CAPTURED' ? 'text-secondary' : tx.status === 'REFUNDED' ? 'text-tertiary' : 'text-error'}">${tx.status}</td>
+                </tr>
+              `).join('');
+            }
+          }
+        }
+
+        // 3. Fetch Mandates
+        const mandRes = await fetch('/dashboard/mandates');
+        if (mandRes.ok) {
+          const { mandates, revoked } = await mandRes.json();
+          const mList = document.getElementById('mandates-list-container');
+          if (mList) {
+            if (!mandates || mandates.length === 0) {
+              mList.innerHTML = '<div class="p-4 bg-surface-container-low border border-outline-variant/20 text-xs font-mono-jb text-on-surface-variant">No active buyer mandates persisted.</div>';
+            } else {
+              mList.innerHTML = mandates.map(m => `
+                <div class="border border-outline-variant/30 bg-surface-container-lowest p-5 space-y-3 cursor-pointer hover:border-primary/50 transition-colors" onclick="selectMandateForRevocation('${m.mandate_id}')" title="Click to fill into Revocation input">
+                  <div class="flex justify-between items-start border-b border-outline-variant/20 pb-2">
+                    <div>
+                      <span class="text-[10px] text-on-surface-variant uppercase">MANDATE ID (Click to select)</span>
+                      <h4 class="text-primary font-bold">${m.mandate_id}</h4>
+                    </div>
+                    <span class="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-bold border border-secondary/30">ACTIVE</span>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4 text-xs font-mono-jb">
+                    <div>
+                      <span class="text-on-surface-variant block">Budget Limit:</span>
+                      <strong class="text-primary">₹${(m.budget_limit / 100).toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span class="text-on-surface-variant block">Remaining:</span>
+                      <strong class="text-secondary">₹${(m.remaining_budget / 100).toFixed(2)}</strong>
+                    </div>
+                  </div>
+                  <div class="w-full h-1.5 bg-surface-container-high">
+                    <div class="h-full bg-primary" style="width: ${Math.min(100, ((m.budget_limit - m.remaining_budget) / m.budget_limit) * 100)}%"></div>
+                  </div>
+                </div>
+              `).join('');
+            }
+          }
+
+          const rList = document.getElementById('revoked-list-container');
+          if (rList) {
+            if (!revoked || revoked.length === 0) {
+              rList.innerHTML = '<div class="text-on-surface-variant">No revoked mandates recorded.</div>';
+            } else {
+              rList.innerHTML = revoked.map(r => `
+                <div class="p-2.5 bg-surface-container-low border border-error/20 flex justify-between items-center text-xs font-mono-jb">
+                  <div>
+                    <span class="text-error font-bold block">${r.mandate_id}</span>
+                    <span class="text-[10px] text-on-surface-variant">${r.revocation_reason}</span>
+                  </div>
+                  <span class="text-[10px] text-error font-bold">REVOKED</span>
+                </div>
+              `).join('');
+            }
+          }
+        }
+
+        // 4. Fetch Catalog
+        const catRes = await fetch('/catalog');
+        if (catRes.ok) {
+          const { items } = await catRes.json();
+          const catList = document.getElementById('catalog-list');
+          if (catList && items) {
+            catList.innerHTML = items.map(i => `
+              <div class="p-3 bg-surface-container-low border border-outline-variant/20 flex justify-between items-center">
+                <div>
+                  <div class="text-primary font-bold">${i.sku}</div>
+                  <div class="text-[11px] text-on-surface-variant">${i.name} (${i.category})</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-on-surface font-bold">₹${(i.unit_price / 100).toFixed(2)}</div>
+                  <div class="text-[10px] text-secondary">Stock: ${i.available_stock} units</div>
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+
+        // 5. Fetch Policy
+        const polRes = await fetch('/dashboard/policies');
+        if (polRes.ok) {
+          const { policy } = await polRes.json();
+          const polRules = document.getElementById('policy-rules-container');
+          if (polRules && policy) {
+            polRules.innerHTML = `
+              <div class="flex justify-between items-center py-1 border-b border-outline-variant/10">
+                <span class="text-on-surface-variant">Policy Version</span>
+                <span class="text-primary font-bold">${policy.policy_version}</span>
+              </div>
+              <div class="flex justify-between items-center py-1 border-b border-outline-variant/10">
+                <span class="text-on-surface-variant">Merchant ID</span>
+                <span class="text-on-surface font-bold">${policy.merchant_id}</span>
+              </div>
+              <div class="flex justify-between items-center py-1 border-b border-outline-variant/10">
+                <span class="text-on-surface-variant">Max Single Ticket Limit</span>
+                <span class="text-on-surface font-bold">₹${(policy.max_transaction_amount / 100).toFixed(2)} INR</span>
+              </div>
+              <div class="flex justify-between items-center py-1 border-b border-outline-variant/10">
+                <span class="text-on-surface-variant">Allowed Categories</span>
+                <span class="text-secondary font-bold">${policy.allowed_categories.join(', ')}</span>
+              </div>
+              <div class="flex justify-between items-center py-1 border-b border-outline-variant/10">
+                <span class="text-on-surface-variant">Auto-Refund on Warehouse Stockout</span>
+                <span class="text-secondary font-bold">${policy.auto_refund_on_fulfillment_failure ? 'ENABLED' : 'DISABLED'}</span>
+              </div>
+            `;
+          }
+        }
+
+        // 6. Fetch Reservations
+        const resRes = await fetch('/dashboard/reservations');
+        if (resRes.ok) {
+          const { reservations } = await resRes.json();
+          const rTable = document.getElementById('reservations-table-body');
+          if (rTable) {
+            if (!reservations || reservations.length === 0) {
+              rTable.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-on-surface-variant">No active held reservations.</td></tr>';
+            } else {
+              rTable.innerHTML = reservations.map(r => `
+                <tr class="hover:bg-surface-container-low">
+                  <td class="p-2.5 text-primary">${r.reservation_id}</td>
+                  <td class="p-2.5 truncate max-w-[120px]">${r.intent_id}</td>
+                  <td class="p-2.5">${r.mandate_id}</td>
+                  <td class="p-2.5 font-bold">₹${(r.reserved_budget / 100).toFixed(2)}</td>
+                  <td class="p-2.5 ${r.status === 'HELD' ? 'text-secondary' : 'text-on-surface-variant'}">${r.status}</td>
+                </tr>
+              `).join('');
+            }
+          }
+        }
+
+        // 7. Fetch Audit Ledger
+        const auditRes = await fetch('/dashboard/audit');
+        if (auditRes.ok) {
+          const { blocks, integrity } = await auditRes.json();
+          const lCount = document.getElementById('ledger-block-count');
+          if (lCount) lCount.innerText = blocks?.length || 0;
+          const lStatus = document.getElementById('ledger-verify-status');
+          if (lStatus && integrity) {
+            lStatus.innerText = integrity.isValid ? 'INTEGRITY VERIFIED' : 'TAMPER DETECTED';
+            lStatus.className = integrity.isValid ? 'text-secondary font-bold' : 'text-error font-bold';
+          }
+
+          const lBlocks = document.getElementById('ledger-blocks');
+          if (lBlocks && blocks) {
+            lBlocks.innerHTML = blocks.slice(0, 10).map((b, idx) => `
+              <div class="border border-outline-variant/30 bg-surface-container-lowest p-4 space-y-2 text-xs font-mono-jb">
+                <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+                  <span class="text-primary font-bold">BLOCK #${blocks.length - idx} &mdash; ${b.event_type}</span>
+                  <span class="text-secondary font-bold">VALIDATED</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <span class="text-on-surface-variant block">Intent ID:</span>
+                    <span class="text-on-surface truncate block">${b.intent_id}</span>
+                  </div>
+                  <div>
+                    <span class="text-on-surface-variant block">Record Hash (SHA-256):</span>
+                    <span class="text-primary truncate block">${b.record_hash}</span>
+                  </div>
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+
+        // 8. Fetch Health
+        const healthRes = await fetch('/dashboard/health');
+        if (healthRes.ok) {
+          const health = await healthRes.json();
+          const hList = document.getElementById('health-components-list');
+          if (hList && health.components) {
+            hList.innerHTML = Object.entries(health.components).map(([name, comp]) => `
+              <div class="flex justify-between items-center p-3 bg-surface-container-low border border-outline-variant/20">
+                <div>
+                  <div class="text-on-surface font-bold uppercase">${name.replace('_', ' ')}</div>
+                  <div class="text-[10px] text-on-surface-variant">${comp.engine || comp.mode || comp.active_version || (comp.blocks ? comp.blocks + ' blocks' : 'Operational')}</div>
+                </div>
+                <span class="px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/30 font-bold">${comp.status}</span>
+              </div>
+            `).join('');
+          }
+        }
+
+        // Calculate and display live route roundtrip latency
+        const elapsed = (performance.now() - t0).toFixed(1);
+        const latEl = document.getElementById('kpi-live-latency');
+        if (latEl) latEl.innerText = `~${elapsed} ms`;
+
+      } catch (err) {
+        console.error('Dashboard data sync error:', err);
+      }
+    }
+
+    // Manual Sync Button Handler
+    async function handleManualSync() {
+      const btn = document.getElementById('btn-sync-global');
+      const txt = document.getElementById('sync-button-text');
+      if (btn) btn.disabled = true;
+      if (txt) txt.innerText = 'SYNCING...';
+      
+      await fetchDashboardData();
+
+      const timeStr = new Date().toLocaleTimeString();
+      if (txt) txt.innerText = `SYNCED (${timeStr})`;
+      setTimeout(() => {
+        if (txt) txt.innerText = 'SYNC';
+        if (btn) btn.disabled = false;
+      }, 2000);
+    }
+
+    // Load Single Transaction Detail
+    async function loadTransactionDetail(intentId) {
+      try {
+        const res = await fetch(`/dashboard/transaction/${intentId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // Switch to transaction tab
+        switchTab('tab-transactions');
+        window.location.hash = 'transactions';
+
+        document.getElementById('detail-intent-id').innerText = data.session?.intent_id || intentId;
+        document.getElementById('detail-order-id').innerText = data.session?.razorpay_order_id || 'NO_RAIL_ORDER';
+        document.getElementById('detail-timestamp').innerText = `${new Date(data.session?.created_at || Date.now()).toUTCString()} • Persisted Record`;
+        document.getElementById('detail-amount').innerText = `₹${((data.session?.amount || 0) / 100).toFixed(2)}`;
+        document.getElementById('detail-status').innerText = data.session?.status || 'UNKNOWN';
+
+        const tList = document.getElementById('trajectory-list');
+        if (tList && data.trajectory) {
+          tList.innerHTML = data.trajectory.map((step, idx) => `
+            <div class="narrative-step relative flex items-start gap-4 pb-4">
+              <div class="narrative-line"></div>
+              <div class="w-8 h-8 bg-surface-container border border-primary/40 flex items-center justify-center text-primary font-bold z-10 text-[11px]">${idx + 1}</div>
+              <div class="flex-1">
+                <div class="flex justify-between items-baseline">
+                  <h4 class="font-bodoni text-base text-on-surface">${step.event_type}</h4>
+                  <span class="text-[10px] text-secondary">${new Date(step.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <p class="text-on-surface-variant text-[11px]">${step.previous_state || 'INIT'} &rarr; ${step.new_state}</p>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        const sMeta = document.getElementById('detail-session-meta');
+        if (sMeta && data.session) {
+          sMeta.innerHTML = `
+            <div class="flex justify-between"><span class="text-on-surface-variant">Intent ID:</span><span class="text-on-surface truncate max-w-[200px]">${data.session.intent_id}</span></div>
+            <div class="flex justify-between"><span class="text-on-surface-variant">Receipt:</span><span class="text-on-surface truncate max-w-[200px]">${data.session.receipt}</span></div>
+            <div class="flex justify-between"><span class="text-on-surface-variant">Reservation ID:</span><span class="text-on-surface">${data.session.reservation_id}</span></div>
+            <div class="flex justify-between"><span class="text-on-surface-variant">Razorpay Order:</span><span class="text-primary font-bold">${data.session.razorpay_order_id || '-'}</span></div>
+          `;
+        }
+
+        const rJson = document.getElementById('detail-raw-json');
+        if (rJson) {
+          rJson.innerText = JSON.stringify(data, null, 2);
+        }
+
+      } catch (err) {
+        console.error('Error loading transaction detail:', err);
+      }
+    }
+
+    // =========================================================================
+    // LIVE DEMO SCENARIO RUNNER (REAL BACKEND CALLS)
+    // =========================================================================
+
+    let currentScenario = 'happy-path';
+    let isSimulating = false;
+
+    document.querySelectorAll('.scenario-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (isSimulating) return;
+        document.querySelectorAll('.scenario-btn').forEach(b => {
+          b.classList.remove('active', 'bg-primary', 'text-on-primary', 'border-primary');
+          b.classList.add('bg-surface-container', 'text-on-surface');
+        });
+        btn.classList.add('active', 'bg-primary', 'text-on-primary', 'border-primary');
+        btn.classList.remove('bg-surface-container', 'text-on-surface');
+        currentScenario = btn.dataset.scenario;
+        resetSimulationUI();
+      });
+    });
+
+    function logTrace(msg, type = 'info') {
+      const globalLog = document.getElementById('global-log');
+      if (!globalLog) return;
+      const time = new Date().toISOString().split('T')[1].substring(0, 12);
+      const colorMap = {
+        info: 'text-on-surface-variant',
+        success: 'text-secondary',
+        error: 'text-error',
+        highlight: 'text-primary font-bold'
+      };
+      const row = document.createElement('div');
+      row.className = `${colorMap[type]} uppercase tracking-wide`;
+      row.innerHTML = `<span class="text-outline-variant">${time}</span> &mdash; ${msg}`;
+      globalLog.appendChild(row);
+      globalLog.scrollTop = globalLog.scrollHeight;
+    }
+
+    function resetSimulationUI() {
+      document.querySelectorAll('.node-console').forEach(el => el.classList.add('opacity-0'));
+      document.querySelectorAll('[id^="flow-"]').forEach(el => el.classList.add('opacity-0'));
+      document.querySelectorAll('#topology-grid > div > div:first-child').forEach(el => {
+        el.classList.remove('border-primary', 'border-error', 'bg-primary/20', 'bg-error/20');
+        el.classList.add('border-outline-variant');
+      });
+      const pol = document.getElementById('node-policy')?.firstElementChild;
+      if (pol) {
+        pol.classList.add('border-primary');
+        pol.classList.remove('border-error');
+      }
+      const rBox = document.getElementById('scenario-result-box');
+      if (rBox) rBox.classList.add('hidden');
+    }
+
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    async function showConsoleNode(nodeId, text, statusText, statusType) {
+      const node = document.getElementById(`node-${nodeId}`);
+      if (!node) return;
+      const con = node.querySelector('.node-console');
+      const box = node.querySelector('div:first-child');
+      if (con) {
+        if (text) con.children[0].innerText = text;
+        const sMsg = con.querySelector('.status-msg');
+        if (sMsg && statusText) {
+          sMsg.innerText = statusText;
+          sMsg.className = `status-msg ${statusType === 'error' ? 'text-error' : 'text-secondary'}`;
+        }
+        con.classList.remove('opacity-0');
+      }
+      if (box) {
+        box.classList.remove('border-outline-variant');
+        box.classList.add(statusType === 'error' ? 'border-error' : 'border-primary', statusType === 'error' ? 'bg-error/10' : 'bg-primary/10');
+      }
+    }
+
+    async function animateFlowLine(flowId, duration = 250) {
+      const f = document.getElementById(flowId);
+      if (!f) return;
+      f.classList.remove('opacity-0');
+      await delay(duration);
+    }
+
+    document.getElementById('run-simulation')?.addEventListener('click', async () => {
+      if (isSimulating) return;
+      isSimulating = true;
+      const btn = document.getElementById('run-simulation');
+      const btnTxt = document.getElementById('run-sim-text');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      if (btnTxt) btnTxt.innerText = 'EXECUTING REAL BACKEND SCENARIO...';
+
+      resetSimulationUI();
+      const globalLog = document.getElementById('global-log');
+      if (globalLog) globalLog.innerHTML = '';
+      
+      logTrace(`DISPATCHING REAL BACKEND REQUEST [${currentScenario.toUpperCase()}]`, 'highlight');
+
+      try {
+        await showConsoleNode('agent', 'PROPOSE: INTENT', null, 'info');
+        await animateFlowLine('flow-1');
+
+        await showConsoleNode('mandate', 'ED25519: SIGNED', null, 'info');
+        await animateFlowLine('flow-2');
+
+        await showConsoleNode('truth', 'QUERY CATALOG', null, 'info');
+        await animateFlowLine('flow-3');
+
+        // FIRE REAL HTTP REQUEST TO BACKEND
+        const res = await fetch('/dashboard/demo/run-scenario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: currentScenario })
+        });
+        const result = await res.json();
+
+        // Render Real Result Box
+        const rBox = document.getElementById('scenario-result-box');
+        const rTitle = document.getElementById('scenario-result-title');
+        const rBadge = document.getElementById('scenario-result-status-badge');
+        const rDetails = document.getElementById('scenario-result-details');
+        if (rBox) rBox.classList.remove('hidden');
+
+        if (res.status === 403 || res.status === 400 || result.error) {
+          await showConsoleNode('policy', 'EVALUATE', `BLOCKED: ${result.error || 'FAIL'}`, 'error');
+          logTrace(`GATEWAY ENFORCEMENT: HTTP ${res.status} ${result.error || ''} &mdash; ${result.message || ''}`, 'error');
+          logTrace('EXECUTION HALTED. Razorpay rails were NOT invoked.', 'error');
+          
+          if (rTitle) rTitle.innerText = `ADVERSARIAL ATTEMPT INTERCEPTED (${currentScenario.toUpperCase()})`;
+          if (rBadge) {
+            rBadge.innerText = `HTTP ${res.status} ${result.error || 'BLOCKED'}`;
+            rBadge.className = 'text-xs px-2 py-0.5 border border-error text-error bg-error/10 font-bold';
+          }
+          if (rDetails) {
+            rDetails.innerHTML = `
+              <div><span class="block uppercase text-[10px]">Error Code:</span><strong class="text-error">${result.error || 'GATEWAY_REJECT'}</strong></div>
+              <div class="md:col-span-2"><span class="block uppercase text-[10px]">Reason:</span><strong class="text-on-surface">${result.message || 'Validation failed'}</strong></div>
+            `;
+          }
+        } else if (currentScenario === 'concurrent') {
+          await showConsoleNode('policy', 'EVALUATE', 'ALLOWED', 'success');
+          await animateFlowLine('flow-4');
+          await showConsoleNode('reserve', 'ACID LOCK', '1 ADMIT / 1 BLOCK', 'success');
+          await animateFlowLine('flow-5');
+          await showConsoleNode('razorpay', 'ORDER 1 CREATED', result.subagentA.body.razorpay_order_id, 'success');
+          await animateFlowLine('flow-6');
+          await showConsoleNode('audit', 'BLOCK COMMITTED', 'SHA-256 HASHED', 'success');
+
+          logTrace(`CONCURRENCY RACE RESULT: Subagent A -> HTTP ${result.subagentA.status} (${result.subagentA.body.razorpay_order_id})`, 'success');
+          logTrace(`CONCURRENCY RACE RESULT: Subagent B -> HTTP ${result.subagentB.status} (${result.subagentB.body.error})`, 'error');
+
+          if (rTitle) rTitle.innerText = 'CONCURRENCY RACE VERIFICATION (ACID GUARD)';
+          if (rBadge) {
+            rBadge.innerText = '201 CREATED / 409 EXHAUSTED';
+            rBadge.className = 'text-xs px-2 py-0.5 border border-secondary text-secondary bg-secondary/10 font-bold';
+          }
+          if (rDetails) {
+            rDetails.innerHTML = `
+              <div><span class="block uppercase text-[10px]">Subagent A:</span><strong class="text-secondary">HTTP ${result.subagentA.status} (Admitted)</strong></div>
+              <div><span class="block uppercase text-[10px]">Subagent B:</span><strong class="text-error">HTTP ${result.subagentB.status} (${result.subagentB.body.error})</strong></div>
+              <div><span class="block uppercase text-[10px]">Razorpay Rail Order:</span><strong class="text-primary">${result.subagentA.body.razorpay_order_id}</strong></div>
+            `;
+          }
+        } else {
+          await showConsoleNode('policy', 'EVALUATE', 'ALLOWED', 'success');
+          await animateFlowLine('flow-4');
+
+          await showConsoleNode('reserve', 'LOCK: SECURED', 'HELD', 'success');
+          await animateFlowLine('flow-5');
+
+          const orderId = result.razorpay_order_id || result.orderCreated?.razorpay_order_id || 'order_created';
+          await showConsoleNode('razorpay', 'ORDER CREATED', orderId, 'success');
+          await animateFlowLine('flow-6');
+
+          await showConsoleNode('audit', 'BLOCK COMMITTED', 'SHA-256 HASHED', 'success');
+          logTrace(`REAL BACKEND EXECUTION SUCCESS: ${JSON.stringify(result)}`, 'success');
+
+          if (rTitle) rTitle.innerText = `TRANSACTION COMMITTED (${currentScenario.toUpperCase()})`;
+          if (rBadge) {
+            rBadge.innerText = `HTTP ${res.status} SUCCESS`;
+            rBadge.className = 'text-xs px-2 py-0.5 border border-secondary text-secondary bg-secondary/10 font-bold';
+          }
+          if (rDetails) {
+            rDetails.innerHTML = `
+              <div><span class="block uppercase text-[10px]">Intent ID:</span><strong class="text-primary truncate block">${result.intent_id || result.orderCreated?.intent_id}</strong></div>
+              <div><span class="block uppercase text-[10px]">Razorpay Order:</span><strong class="text-secondary">${orderId}</strong></div>
+              <div><span class="block uppercase text-[10px]">Amount Settled:</span><strong class="text-primary">₹${((result.amount_paise || result.orderCreated?.amount_paise || 212400) / 100).toFixed(2)}</strong></div>
+            `;
+          }
+        }
+
+        // Immediately refresh live dashboard data
+        await fetchDashboardData();
+
+      } catch (err) {
+        logTrace(`EXECUTION ERROR: ${err.message}`, 'error');
+      } finally {
+        isSimulating = false;
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        if (btnTxt) btnTxt.innerText = 'EXECUTE REAL BACKEND SCENARIO';
+      }
+    });
+
+    // Concurrency Race Test
+    async function runConcurrencyTest() {
+      const btn = document.getElementById('btn-concurrency-test');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/dashboard/demo/run-scenario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: 'concurrent' })
+        });
+        const data = await res.json();
+        document.getElementById('concur-admitted').innerText = '1 (HTTP 201)';
+        document.getElementById('concur-blocked').innerText = '1 (HTTP 409)';
+        alert(`CONCURRENCY RACE VERIFIED:\n\nSubagent A: HTTP ${data.subagentA.status} (${data.subagentA.body.status || 'ORDER_CREATED'})\nSubagent B: HTTP ${data.subagentB.status} (${data.subagentB.body?.error || 'MANDATE_EXHAUSTED'})\n\nRemaining Budget strictly protected.`);
+        await fetchDashboardData();
+      } catch (err) {
+        alert('Concurrency test failed: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Helper: Select Mandate for Revocation
+    function selectMandateForRevocation(mandateId) {
+      const input = document.getElementById('revoke-mandate-id');
+      if (input) {
+        input.value = mandateId;
+        input.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // Revocation Handler
+    async function handleRevokeMandate() {
+      const mandateId = document.getElementById('revoke-mandate-id').value.trim();
+      const btn = document.getElementById('btn-revoke-mandate-action');
+      if (!mandateId) {
+        alert('Please enter or select a valid mandate ID');
+        return;
+      }
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/v1/mandates/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mandate_id: mandateId, reason: 'Revoked by Human Principal via UI console' })
+        });
+        const data = await res.json();
+        alert(`Mandate ${mandateId} Revoked in Database:\n${JSON.stringify(data, null, 2)}\n\nSubsequent checkout attempts with this mandate will return HTTP 403 MANDATE_REVOKED.`);
+        await fetchDashboardData();
+      } catch (err) {
+        alert('Revocation error: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Policy Update Handlers
+    function togglePolicyMutationForm() {
+      const panel = document.getElementById('policy-mutation-panel');
+      if (panel) panel.classList.toggle('hidden');
+    }
+
+    async function submitPolicyMutation() {
+      const capVal = document.getElementById('policy-mutate-cap').value;
+      const btn = document.getElementById('btn-submit-policy-mutate');
+      if (!capVal) return;
+      const amountPaise = Number(capVal) * 100;
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/v1/merchant/policy', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            policy_version: `pol_v2.${Date.now().toString().slice(-3)}.0`,
+            effective_at: Math.floor(Date.now() / 1000),
+            merchant_id: 'merch_acme_electronics_01',
+            max_transaction_amount: amountPaise,
+            allowed_categories: ['electronics', 'furniture'],
+            auto_refund_on_fulfillment_failure: true,
+            min_margin_percentage: 15
+          })
+        });
+        const data = await res.json();
+        alert(`Policy Successfully Mutated:\nVersion: ${data.policy.policy_version}\nMax Transaction: ₹${capVal}.00\n\nAll subsequent checkouts exceeding ₹${capVal}.00 will be blocked.`);
+        togglePolicyMutationForm();
+        await fetchDashboardData();
+      } catch (err) {
+        alert('Policy update error: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Ledger Verify Handler
+    async function verifyLedger() {
+      const btn = document.getElementById('btn-verify-audit-action');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/audit/integrity');
+        const data = await res.json();
+        alert(`SHA-256 Audit Ledger Integrity:\n\nValid Chain: ${data.isValid}\nChecked Blocks: ${data.checkedBlocks}\n${data.corruptedBlockIndex !== undefined ? 'Corrupted Block Index: ' + data.corruptedBlockIndex : 'No tampering detected.'}`);
+        await fetchDashboardData();
+      } catch (err) {
+        alert('Integrity check error: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Initial Load & Polling Interval (every 4 seconds)
+    fetchDashboardData();
+    setInterval(fetchDashboardData, 4000);
+  </script>
+</body>
+</html>

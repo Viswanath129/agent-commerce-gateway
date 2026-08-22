@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "studio-6471864054-30ce7"
+  },
+  "targets": {
+    "studio-6471864054-30ce7": {
+      "hosting": {
+        "agent-commerce-gateway": [
+          "agent-commerce-gateway"
+        ]
+      }
+    }
+  }
+}

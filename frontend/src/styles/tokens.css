@@ -1,0 +1,61 @@
+/**
+ * ACG Luxury Editorial Design Tokens
+ * Master CSS variable definitions for color, typography, spacing, and transitions.
+ */
+
+:root {
+  /* Surface & Background Colors */
+  --color-bg: #10100f;
+  --color-surface: #14140e;
+  --color-surface-low: #1c1b14;
+  --color-surface-container: #201f18;
+  --color-surface-high: #2b2a22;
+  --color-surface-elevated: #36342c;
+
+  /* Typography Colors */
+  --color-text: #e6e2d9;
+  --color-text-muted: #969389;
+  --color-text-dim: #636159;
+
+  /* Accent & Semantic Palette */
+  --color-accent: #d1c5a2;
+  --color-accent-hover: #b8ac8b;
+  --color-success: #c9caa9;
+  --color-success-dim: rgba(201, 202, 169, 0.15);
+  --color-warning: #e4c188;
+  --color-warning-dim: rgba(228, 193, 136, 0.15);
+  --color-danger: #ffb4ab;
+  --color-danger-dim: rgba(255, 180, 171, 0.15);
+  --color-border: #48473e;
+  --color-border-subtle: rgba(72, 71, 62, 0.35);
+
+  /* Typography Tokens */
+  --font-display: "Bodoni Moda", "Cormorant Garamond", serif;
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+
+  /* Spacing Tokens */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --space-96: 96px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
