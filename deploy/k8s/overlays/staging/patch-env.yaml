@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-commerce-gateway
+spec:
+  replicas: 1

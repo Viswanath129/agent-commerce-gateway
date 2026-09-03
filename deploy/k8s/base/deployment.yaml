@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-commerce-gateway
+  labels:
+    app.kubernetes.io/name: agent-commerce-gateway
+    app.kubernetes.io/part-of: razorpay-buildathon
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-commerce-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-commerce-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/viswanath129/agent-commerce-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: gateway-config
+          env:
+            - name: RAZORPAY_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: razorpay-credentials
+                  key: key-id
+                  optional: true
+            - name: RAZORPAY_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: razorpay-credentials
+                  key: key-secret
+                  optional: true
+            - name: RAZORPAY_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: razorpay-credentials
+                  key: webhook-secret
+                  optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/system/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/system/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: gateway-storage
+              mountPath: /app/data
+      volumes:
+        - name: gateway-storage
+          emptyDir: {}

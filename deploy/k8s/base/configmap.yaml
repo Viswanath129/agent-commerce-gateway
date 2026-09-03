@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  PORT: "3000"
+  HOST: "0.0.0.0"
+  NODE_ENV: "production"
+  MERCHANT_ID: "merch_acme_electronics_01"
+  MERCHANT_NAME: "Acme Electronics Store"
+  DATABASE_PATH: "./data/acg_gateway.db"
