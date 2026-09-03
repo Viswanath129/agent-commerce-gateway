@@ -26,7 +26,16 @@ export class RazorpayWebhookProcessor {
     this.reservationEngine = reservationEngine;
     this.railClient = railClient;
     this.policy = policy;
-    this.webhookSecret = webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_webhook_secret_12345";
+    const envSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (process.env.NODE_ENV === "production" && !envSecret) {
+      throw new Error("RAZORPAY_WEBHOOK_SECRET is required. No fallback secrets are permitted in production.");
+    }
+    this.webhookSecret = webhookSecret || envSecret || "rzp_webhook_secret_test";
+    
+    // In production, we ensure it's not the test secret unless explicitly set to it (unlikely)
+    if (process.env.NODE_ENV === "production" && this.webhookSecret === "rzp_webhook_secret_test" && !envSecret) {
+       throw new Error("RAZORPAY_WEBHOOK_SECRET is required. No fallback secrets are permitted in production.");
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 export interface PanelProps {
   title?: React.ReactNode;
@@ -6,7 +6,7 @@ export interface PanelProps {
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  bodyClassName?: string;
+  variant?: 'default' | 'elevated' | 'subtle' | 'glass';
 }
 
 export const Panel: React.FC<PanelProps> = ({
@@ -14,21 +14,39 @@ export const Panel: React.FC<PanelProps> = ({
   subtitle,
   action,
   children,
-  className = "",
-  bodyClassName = "",
+  className = '',
+  variant = 'glass',
 }) => {
+  const panelStyles = {
+    default: 'glass-panel rounded-lg',
+    glass: 'glass-panel rounded-lg',
+    elevated: 'glass-panel glass-panel-interactive rounded-lg',
+    subtle: 'glass-panel-subtle rounded-lg',
+  }[variant];
+
   return (
-    <div className={`border border-outline-variant/30 bg-surface-container-lowest flex flex-col ${className}`}>
-      {(title || action) && (
-        <div className="flex items-center justify-between border-b border-outline-variant/20 p-4">
-          <div className="flex flex-col">
-            {title && <div className="font-bodoni text-lg text-on-surface">{title}</div>}
-            {subtitle && <div className="text-[11px] font-mono-jb text-on-surface-variant/70">{subtitle}</div>}
+    <section className={`relative overflow-hidden ${panelStyles} p-5 md:p-6 transition-all duration-200 ${className}`}>
+      {/* Specular top rim light reflection */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+
+      {(title || subtitle || action) && (
+        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] pb-4 mb-5">
+          <div>
+            {title && (
+              <h3 className="font-display text-lg md:text-xl font-normal text-[#F4F0E6] tracking-wide">
+                {title}
+              </h3>
+            )}
+            {subtitle && (
+              <p className="text-xs font-mono text-[#BCB7AB] mt-0.5 leading-relaxed">
+                {subtitle}
+              </p>
+            )}
           </div>
-          {action && <div>{action}</div>}
+          {action && <div className="flex-shrink-0">{action}</div>}
         </div>
       )}
-      <div className={`p-4 flex-1 ${bodyClassName}`}>{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   );
 };

@@ -100,7 +100,7 @@ export function initDatabase(dbPath: string = "./data/acg_gateway.db"): Database
       payload_json TEXT NOT NULL
     );
 
-    -- 7. Non-Repudiable Cryptographic Audit Ledger
+    -- 7. Tamper-Evident SHA-256 Audit Ledger
     CREATE TABLE IF NOT EXISTS audit_ledger (
       audit_id TEXT PRIMARY KEY,
       intent_id TEXT NOT NULL,

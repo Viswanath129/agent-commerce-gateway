@@ -473,6 +473,7 @@ describe("ACG Comprehensive Adversarial Verification Suite", () => {
         method: "PUT",
         url: "/v1/merchant/policy",
         payload: policyV2,
+        headers: { Authorization: "Bearer secret_merchant_admin" }
       });
       expect(updateRes.statusCode).toBe(200);
       expect(updateRes.json().policy.policy_version).toBe("pol_v2.0.0");
@@ -523,6 +524,7 @@ describe("ACG Comprehensive Adversarial Verification Suite", () => {
           mandate_id: mandateId,
           reason: "Suspicious subagent behavior detected by user principal",
         },
+        headers: { Authorization: "Bearer secret_merchant_admin" }
       });
       expect(revokeRes.statusCode).toBe(200);
       expect(revokeRes.json().status).toBe("REVOKED");

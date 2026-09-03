@@ -13,3 +13,4 @@ export * from "./reservationApi.js";
 export * from "./auditApi.js";
 export * from "./healthApi.js";
 export * from "./demoApi.js";
+export * from "./compatibilityApi.js";

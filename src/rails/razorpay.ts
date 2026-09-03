@@ -30,9 +30,16 @@ export class RazorpayRailClient {
   private isLiveCredentials: boolean;
 
   constructor(keyId?: string, keySecret?: string) {
-    this.keyId = keyId || process.env.RAZORPAY_KEY_ID || "rzp_test_mock";
-    this.keySecret = keySecret || process.env.RAZORPAY_KEY_SECRET || "mock_secret";
-    this.isLiveCredentials = this.keyId.startsWith("rzp_test_") && this.keyId !== "rzp_test_placeholder_key";
+    const envId = process.env.RAZORPAY_KEY_ID;
+    const envSecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (process.env.NODE_ENV === "production" && (!envId || !envSecret)) {
+      throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.");
+    }
+
+    this.keyId = keyId || envId || "rzp_test_mock";
+    this.keySecret = keySecret || envSecret || "mock_secret";
+    this.isLiveCredentials = this.keyId.startsWith("rzp_test_") && this.keyId !== "rzp_test_placeholder_key" && this.keyId !== "rzp_test_mock";
   }
 
   /**

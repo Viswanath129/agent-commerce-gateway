@@ -23,7 +23,7 @@ ACG normalizes untrusted incoming AI intents (MCP, ACP, REST) into a canonical I
 4. POLICY ENGINE:          Versioned merchant rules DSL (max ticket, allowed categories).
 5. DUAL-RESOURCE LOCK:     Atomic BEGIN IMMEDIATE lock on mandate budget & SKU inventory.
 6. RAZORPAY RAILS:         Idempotent Order creation (receipt = intent_id) & policy auto-refund.
-7. NON-REPUDIABLE AUDIT:   Backwards-chained SHA-256 ledger recording every state transition.
+7. TAMPER-EVIDENT AUDIT:   Backwards-chained SHA-256 ledger recording every state transition.
 ```
 
 ---

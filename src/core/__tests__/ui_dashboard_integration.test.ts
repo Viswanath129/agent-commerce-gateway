@@ -21,7 +21,7 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
   });
 
   it("2. GET /dashboard/metrics - Aggregates real numerical metrics from SQLite", async () => {
-    const res = await app.inject({ method: "GET", url: "/dashboard/metrics" });
+    const res = await app.inject({ method: "GET", url: "/dashboard/metrics", headers: { Authorization: "Bearer secret_merchant_admin" } });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body).toHaveProperty("ai_intents_count");
@@ -32,11 +32,11 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
   });
 
   it("3. GET /dashboard/transactions & /dashboard/mandates - Returns real persistent registries", async () => {
-    const txRes = await app.inject({ method: "GET", url: "/dashboard/transactions" });
+    const txRes = await app.inject({ method: "GET", url: "/dashboard/transactions", headers: { Authorization: "Bearer secret_merchant_admin" } });
     expect(txRes.statusCode).toBe(200);
     expect(Array.isArray(JSON.parse(txRes.body).transactions)).toBe(true);
 
-    const mandRes = await app.inject({ method: "GET", url: "/dashboard/mandates" });
+    const mandRes = await app.inject({ method: "GET", url: "/dashboard/mandates", headers: { Authorization: "Bearer secret_merchant_admin" } });
     expect(mandRes.statusCode).toBe(200);
     const mandData = JSON.parse(mandRes.body);
     expect(Array.isArray(mandData.mandates)).toBe(true);
@@ -44,7 +44,7 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
   });
 
   it("4. GET /dashboard/health - Returns live operational node status", async () => {
-    const res = await app.inject({ method: "GET", url: "/dashboard/health" });
+    const res = await app.inject({ method: "GET", url: "/dashboard/health", headers: { Authorization: "Bearer secret_merchant_admin" } });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.status).toBe("HEALTHY");
@@ -108,13 +108,14 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
     const revokeRes = await app.inject({
       method: "POST",
       url: "/v1/mandates/revoke",
+      headers: { Authorization: "Bearer secret_merchant_admin" },
       payload: { mandate_id: "man_ui_test_1", reason: "Revoked via UI action button" },
     });
     expect(revokeRes.statusCode).toBe(200);
     expect(JSON.parse(revokeRes.body).status).toBe("REVOKED");
 
     // Verify presence in revoked list
-    const mandListRes = await app.inject({ method: "GET", url: "/dashboard/mandates" });
+    const mandListRes = await app.inject({ method: "GET", url: "/dashboard/mandates", headers: { Authorization: "Bearer secret_merchant_admin" } });
     const mandListData = JSON.parse(mandListRes.body);
     expect(mandListData.revoked.some((r: any) => r.mandate_id === "man_ui_test_1")).toBe(true);
   });
@@ -123,6 +124,7 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
     const updateRes = await app.inject({
       method: "PUT",
       url: "/v1/merchant/policy",
+      headers: { Authorization: "Bearer secret_merchant_admin" },
       payload: {
         policy_version: "pol_v2.1.0",
         effective_at: Math.floor(Date.now() / 1000),
@@ -137,7 +139,7 @@ describe("ACG Luxury Dashboard & Real API Integration Test Suite", () => {
     expect(JSON.parse(updateRes.body).policy.policy_version).toBe("pol_v2.1.0");
 
     // Verify active policy returned by dashboard
-    const polRes = await app.inject({ method: "GET", url: "/dashboard/policies" });
+    const polRes = await app.inject({ method: "GET", url: "/dashboard/policies", headers: { Authorization: "Bearer secret_merchant_admin" } });
     expect(JSON.parse(polRes.body).policy.policy_version).toBe("pol_v2.1.0");
   });
 

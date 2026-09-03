@@ -1,4 +1,10 @@
-import type { ApiErrorPayload } from "./types.js";
+/**
+ * Hardened ACG ApiClient
+ * Passes administrative bearer credentials for control plane actions
+ * Adheres strictly to the ZERO-MOCK contract
+ */
+
+import type { ApiErrorPayload } from './types.js';
 
 export class ApiError extends Error {
   public statusCode: number;
@@ -7,7 +13,7 @@ export class ApiError extends Error {
 
   constructor(message: string, statusCode: number, errorCode?: string, details?: Record<string, unknown>) {
     super(message);
-    this.name = "ApiError";
+    this.name = 'ApiError';
     this.statusCode = statusCode;
     this.errorCode = errorCode;
     this.details = details;
@@ -22,14 +28,17 @@ export interface RequestOptions extends RequestInit {
 export class ApiClient {
   private baseUrl: string;
   private defaultTimeoutMs: number;
+  private defaultAuthToken: string;
 
-  constructor(baseUrl: string = "", defaultTimeoutMs: number = 10000) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
+  constructor(baseUrl: string = '', defaultTimeoutMs: number = 10000, defaultAuthToken: string = '') {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.defaultTimeoutMs = defaultTimeoutMs;
+    // For LOCAL DEVELOPMENT only, allow Vite env token.
+    this.defaultAuthToken = defaultAuthToken || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_ACG_MERCHANT_TOKEN) || '';
   }
 
   public setBaseUrl(url: string): void {
-    this.baseUrl = url.replace(/\/$/, "");
+    this.baseUrl = url.replace(/\/$/, '');
   }
 
   public getBaseUrl(): string {
@@ -37,7 +46,7 @@ export class ApiClient {
   }
 
   private buildUrl(endpoint: string, params?: Record<string, string | number | boolean | undefined>): string {
-    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     let url = `${this.baseUrl}${cleanEndpoint}`;
 
     if (params) {
@@ -49,7 +58,7 @@ export class ApiClient {
       }
       const queryString = searchParams.toString();
       if (queryString) {
-        url += (url.includes("?") ? "&" : "?") + queryString;
+        url += (url.includes('?') ? '&' : '?') + queryString;
       }
     }
 
@@ -63,13 +72,21 @@ export class ApiClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    const reqHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(headers as Record<string, string>),
+    };
+
+    // Only attach merchant auth to protected control-plane routes
+    const isProtected = endpoint.startsWith('/dashboard') || endpoint.startsWith('/v1/merchant') || endpoint.startsWith('/v1/mandates/revoke');
+    if (isProtected && this.defaultAuthToken) {
+      reqHeaders['Authorization'] = `Bearer ${this.defaultAuthToken}`;
+    }
+
     const config: RequestInit = {
       ...customConfig,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        ...headers,
-      },
+      headers: reqHeaders,
       signal: controller.signal,
     };
 
@@ -77,11 +94,11 @@ export class ApiClient {
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
 
-      const isJson = response.headers.get("content-type")?.includes("application/json");
+      const isJson = response.headers.get('content-type')?.includes('application/json');
       const data = isJson ? await response.json() : await response.text();
 
       if (!response.ok) {
-        const errorPayload = typeof data === "object" ? (data as ApiErrorPayload) : null;
+        const errorPayload = typeof data === 'object' ? (data as ApiErrorPayload) : null;
         const errorMessage = errorPayload?.message || errorPayload?.error || `HTTP error ${response.status}: ${response.statusText}`;
         const errorCode = errorPayload?.error;
         const details = errorPayload?.details;
@@ -97,22 +114,22 @@ export class ApiClient {
         throw err;
       }
 
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new ApiError(`Request timeout after ${timeoutMs}ms`, 408, "TIMEOUT");
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new ApiError(`Request timeout after ${timeoutMs}ms`, 408, 'TIMEOUT');
       }
 
-      throw new ApiError(err instanceof Error ? err.message : "Network error", 0, "NETWORK_ERROR");
+      throw new ApiError(err instanceof Error ? err.message : 'Network error', 0, 'NETWORK_ERROR');
     }
   }
 
   public get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "GET" });
+    return this.request<T>(endpoint, { ...options, method: 'GET' });
   }
 
   public post<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
-      method: "POST",
+      method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   }
@@ -120,15 +137,14 @@ export class ApiClient {
   public put<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
-      method: "PUT",
+      method: 'PUT',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   }
 
   public delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "DELETE" });
+    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
 }
 
-// Global default singleton instance
 export const apiClient = new ApiClient();

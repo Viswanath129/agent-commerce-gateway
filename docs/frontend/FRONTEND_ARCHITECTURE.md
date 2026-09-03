@@ -113,3 +113,26 @@ The visual language follows **Luxury Editorial FinTech**:
 1. **Unit & API Contract Testing:** `src/core/__tests__/typed_api_client.test.ts` (8 tests) verifies type safety and mock network transport.
 2. **UI Integration Testing:** `src/core/__tests__/ui_dashboard_integration.test.ts` (11 tests) verifies all dashboard read/mutation endpoints against in-memory SQLite instances.
 3. **Adversarial Security Testing:** `src/core/__tests__/adversarial_suite.test.ts` (14 tests) and `src/demo/pentest_runner.ts` (19 tests) verify end-to-end security invariants.
+
+---
+
+## 6. Authentication Architecture & Credential Model
+
+The ACG architecture strictly enforces separation of concerns between **Public Agent Ingress** and **Private Merchant Administration**.
+
+### Route Protection Model
+- **Public / Agent (`/v1/agent/checkout`)**: Unauthenticated endpoint. Security is guaranteed via cryptographic Ed25519 Intent signatures and strict backend pipeline validation (policy, mandate limits, catalog stock).
+- **Webhook (`/webhooks/razorpay`)**: Unauthenticated endpoint. Security is guaranteed via timing-safe HMAC signature verification.
+- **Merchant Dashboard (`/dashboard/*`, `/v1/merchant/*`, `/v1/mandates/revoke`)**: Strictly protected by `Authorization: Bearer <token>` enforcing scoped capabilities (e.g. `merchant:read`, `merchant:policy:write`).
+
+### Local Sandbox vs Production Deployment
+
+1. **Local Sandbox Setup**
+   The React frontend uses `import.meta.env.VITE_ACG_MERCHANT_TOKEN` to inject the dashboard credential into the local Vite bundle. This is perfectly acceptable for a local sandbox or buildathon demo environment, allowing seamless testing of the merchant control plane without building a full login system.
+
+2. **Production Architecture Warning**
+   A Vite environment variable prefixed with `VITE_` is inherently exposed to browser-side code. The `VITE_ACG_MERCHANT_TOKEN` must **NOT** be used as a security mechanism in a true production deployment. In production, this credential architecture must be replaced with a proper authenticated session model (e.g., HttpOnly cookies, OIDC/OAuth2 session flows, or backend-for-frontend token exchange) to ensure the merchant administrative credential is never exposed to the client browser.
+
+### Error UX
+- **401 Unauthorized**: Renders a full-screen `AUTHENTICATION REQUIRED` boundary, prompting the user to supply the credential.
+- **403 Forbidden**: Renders an `ACCESS DENIED` boundary, gracefully explaining that the supplied token lacks the specific `merchant:policy:write` or `merchant:mandate:revoke` scopes.

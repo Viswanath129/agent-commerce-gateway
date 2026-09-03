@@ -220,3 +220,46 @@ export interface DemoScenarioResult {
   refundExecution?: { success: boolean; status: string };
   orderCreated?: Record<string, unknown>;
 }
+
+export interface CompatibilityMatrixModel {
+  name: string;
+  status: "CONNECTED" | "READY" | "PLUGGABLE";
+  role: string;
+  authority: string;
+}
+
+export interface CompatibilityMatrixProtocol {
+  name: string;
+  code: string;
+  status: "ACTIVE" | "ADAPTER READY" | "TRUST ADAPTER READY" | "ARCHITECTURE-COMPATIBLE" | "PLUGGABLE";
+  version: string;
+  description: string;
+}
+
+export interface CompatibilityMatrixIntelligence {
+  name: string;
+  status: "INTELLIGENCE ADAPTER" | "CONNECTED" | "PLUGGABLE";
+  role: string;
+  model_version?: string;
+  authority: string;
+  distinction: string;
+}
+
+export interface CompatibilityMatrixRail {
+  name: string;
+  status: "ACTIVE" | "ADAPTER READY" | "PLUGGABLE";
+  type: string;
+}
+
+export interface CompatibilityMatrixResponse {
+  summary: {
+    architecture: string;
+    core_thesis: string;
+    vulcan_distinction: string;
+    active_adapters_count: number;
+  };
+  models: CompatibilityMatrixModel[];
+  protocols: CompatibilityMatrixProtocol[];
+  payment_intelligence: CompatibilityMatrixIntelligence[];
+  payment_rails: CompatibilityMatrixRail[];
+}

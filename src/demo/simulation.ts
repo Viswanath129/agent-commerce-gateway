@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { buildApp } from "../server.js";
 import { generatePrincipalKeypair, signMandate } from "../core/crypto.js";
 import type { BuyerMandate, CanonicalIntent } from "../core/types.js";
@@ -17,6 +18,9 @@ function printStep(stepNum: number, name: string, detail: string) {
 async function runDemo() {
   process.env.NODE_ENV = "test";
   process.env.DATABASE_PATH = "./data/demo_simulation.db";
+  if (fs.existsSync("./data/demo_simulation.db")) {
+    try { fs.unlinkSync("./data/demo_simulation.db"); } catch (_) {}
+  }
 
   const { app, db, services } = await buildApp();
   await app.ready();
@@ -103,7 +107,7 @@ async function runDemo() {
     payload: validIntent,
   });
 
-  const orderData = checkoutRes.json();
+  const orderData = checkoutRes.json(); if(checkoutRes.statusCode===400) console.log(JSON.stringify(orderData));
   console.log(`\n✅ Gateway Response Status: ${checkoutRes.statusCode} Created`);
   console.log(`   ├── Intent ID:            ${orderData.intent_id}`);
   console.log(`   ├── Razorpay Order ID:    ${orderData.razorpay_order_id}`);

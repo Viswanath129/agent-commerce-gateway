@@ -45,7 +45,7 @@ describe("ACG Front-End Typed API Client Library", () => {
 
     globalThis.fetch = mockFetch as any;
 
-    customClient = new ApiClient("http://localhost:3000", 5000);
+    customClient = new ApiClient("http://localhost:3000", 5000, "secret_merchant_admin");
     dashboard = new DashboardApi(customClient);
     transactions = new TransactionApi(customClient);
     mandates = new MandateApi(customClient);

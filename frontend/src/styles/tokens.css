@@ -1,61 +1,88 @@
 /**
- * ACG Luxury Editorial Design Tokens
- * Master CSS variable definitions for color, typography, spacing, and transitions.
+ * ACG Luxury Editorial + iOS 26 Liquid Glass Design Tokens
+ * Institutional Fintech + Swiss Precision + Dynamic Glass Material
  */
 
 :root {
-  /* Surface & Background Colors */
-  --color-bg: #10100f;
-  --color-surface: #14140e;
-  --color-surface-low: #1c1b14;
-  --color-surface-container: #201f18;
-  --color-surface-high: #2b2a22;
-  --color-surface-elevated: #36342c;
+  /* Surfaces & Backgrounds */
+  --bg-canvas: #0C0C0B;
+  --bg-primary: #10100F;
+  --bg-surface: #161614;
+  --bg-elevated: #1C1C19;
+  --border-color: #2D2C28;
+  --border-subtle: rgba(200, 178, 122, 0.14);
+  --border-active: rgba(200, 178, 122, 0.45);
 
-  /* Typography Colors */
-  --color-text: #e6e2d9;
-  --color-text-muted: #969389;
-  --color-text-dim: #636159;
+  /* Liquid Glass Material Primitives (iOS 26 Liquid Glass) */
+  --glass-bg: rgba(22, 22, 20, 0.76);
+  --glass-bg-subtle: rgba(26, 26, 23, 0.55);
+  --glass-bg-elevated: rgba(30, 30, 26, 0.88);
+  --glass-bg-deep: rgba(14, 14, 13, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-subtle: rgba(255, 255, 255, 0.08);
+  --glass-border-active: rgba(200, 178, 122, 0.55);
+  --glass-specular: inset 0 1px 1px 0 rgba(255, 255, 255, 0.25), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4);
+  --glass-specular-active: inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 1px 0 rgba(0, 0, 0, 0.6);
+  --glass-blur: blur(24px) saturate(190%);
+  --glass-blur-deep: blur(36px) saturate(200%);
+  --glass-blur-subtle: blur(16px) saturate(160%);
+  --glass-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.7), 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --glass-shadow-glow: 0 16px 48px -4px rgba(0, 0, 0, 0.8), 0 0 32px -2px rgba(200, 178, 122, 0.28);
 
-  /* Accent & Semantic Palette */
-  --color-accent: #d1c5a2;
-  --color-accent-hover: #b8ac8b;
-  --color-success: #c9caa9;
-  --color-success-dim: rgba(201, 202, 169, 0.15);
-  --color-warning: #e4c188;
-  --color-warning-dim: rgba(228, 193, 136, 0.15);
-  --color-danger: #ffb4ab;
-  --color-danger-dim: rgba(255, 180, 171, 0.15);
-  --color-border: #48473e;
-  --color-border-subtle: rgba(72, 71, 62, 0.35);
+  /* Typography */
+  --text-primary: #F4F0E6;
+  --text-secondary: #BCB7AB;
+  --text-muted: #7A776F;
 
-  /* Typography Tokens */
-  --font-display: "Bodoni Moda", "Cormorant Garamond", serif;
-  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+  /* Primary Brand Accent (Champagne Gold) */
+  --accent-primary: #C8B27A;
+  --accent-highlight: #E4D5B0;
+  --accent-dim: rgba(200, 178, 122, 0.12);
+  --accent-glow: rgba(200, 178, 122, 0.25);
 
-  /* Spacing Tokens */
-  --space-4: 4px;
-  --space-8: 8px;
-  --space-12: 12px;
-  --space-16: 16px;
-  --space-24: 24px;
-  --space-32: 32px;
-  --space-48: 48px;
-  --space-64: 64px;
-  --space-96: 96px;
+  /* Semantic Status Tokens */
+  --semantic-success: #6F9B83;
+  --semantic-success-dim: rgba(111, 155, 131, 0.16);
+  --semantic-success-glow: rgba(111, 155, 131, 0.35);
 
-  /* Transitions */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+  --semantic-danger: #A76565;
+  --semantic-danger-dim: rgba(167, 101, 101, 0.16);
+  --semantic-danger-glow: rgba(167, 101, 101, 0.35);
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+  --semantic-warning: #B28A52;
+  --semantic-warning-dim: rgba(178, 138, 82, 0.16);
+  --semantic-warning-glow: rgba(178, 138, 82, 0.35);
+
+  --semantic-info: #73889A;
+  --semantic-info-dim: rgba(115, 136, 154, 0.16);
+  --semantic-info-glow: rgba(115, 136, 154, 0.35);
+
+  --semantic-reconciliation: #8A819C;
+  --semantic-reconciliation-dim: rgba(138, 129, 156, 0.16);
+
+  /* Font Families */
+  --font-display: 'Bodoni Moda', 'Cormorant Garamond', Georgia, serif;
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+
+  /* Spacing Grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Elevation Shadows */
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 6px 20px rgba(0, 0, 0, 0.5);
+
+  /* Micro-Physics Transitions */
+  --transition-instant: 100ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-base: 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }

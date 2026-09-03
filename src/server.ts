@@ -22,6 +22,7 @@ export const defaultPolicy: MerchantPolicy = {
 
 export async function buildApp(customDb?: SqliteDatabase, customPolicy?: MerchantPolicy) {
   const app = Fastify({
+    bodyLimit: 1048576, // 1MB body limit
     logger: {
       level: process.env.NODE_ENV === "test" ? "silent" : "info",
     },
@@ -30,6 +31,12 @@ export async function buildApp(customDb?: SqliteDatabase, customPolicy?: Merchan
   const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";
   const db = customDb || initDatabase(dbPath);
   const policy = customPolicy || defaultPolicy;
+  await app.register(import('@fastify/rate-limit'), {
+    global: false,
+    max: 100,
+    timeWindow: '1 minute'
+  });
+
   const services = registerGatewayRoutes(app, db, policy);
 
   return { app, db, services };
