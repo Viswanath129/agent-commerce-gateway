@@ -5,12 +5,13 @@ import { Badge } from '../../components/ui/Badge.js';
 import { DataTable, type ColumnDef } from '../../components/ui/DataTable.js';
 import { formatInr, formatTimestamp } from '../../lib/formatters/index.js';
 import type { MerchantPolicy, CatalogItem } from '../../types/index.js';
+import { VisualPolicyBuilder } from './VisualPolicyBuilder.js';
 
 export interface PoliciesViewProps {
   policy: MerchantPolicy | null;
   catalog: CatalogItem[];
   isLoading: boolean;
-  onUpdatePolicy: (newCapInr: number) => Promise<void>;
+  onUpdatePolicy: (policyOrCap: number | MerchantPolicy) => Promise<void>;
   isUpdating: boolean;
 }
 
@@ -21,6 +22,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   onUpdatePolicy,
   isUpdating,
 }) => {
+  const [showVisualBuilder, setShowVisualBuilder] = useState(false);
   const [showMutationForm, setShowMutationForm] = useState(false);
   const [newCapInput, setNewCapInput] = useState('2500');
 
@@ -29,6 +31,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     if (isNaN(val) || val <= 0) return;
     await onUpdatePolicy(val);
     setShowMutationForm(false);
+  };
+
+  const handleApplyFullPolicy = async (newPolicy: MerchantPolicy) => {
+    await onUpdatePolicy(newPolicy);
+    setShowVisualBuilder(false);
   };
 
   const catalogColumns: ColumnDef<CatalogItem>[] = [
@@ -76,11 +83,30 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
         title="POLICIES & COMMERCE TRUTH"
         description="Split enforcement boundary: Merchant-controlled operational DSL rules versus deterministic SQLite catalog ground truth."
         action={
-          <Badge variant="accent" pulse>
-            {policy ? policy.policy_version : 'pol_v1.0.0'} ACTIVE
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowVisualBuilder(!showVisualBuilder)}
+            >
+              {showVisualBuilder ? 'CLOSE STUDIO' : '✨ VISUAL POLICY STUDIO'}
+            </Button>
+            <Badge variant="accent" pulse>
+              {policy ? policy.policy_version : 'pol_v1.0.0'} ACTIVE
+            </Badge>
+          </div>
         }
       />
+
+      {/* Embedded Visual Policy Builder Studio */}
+      {showVisualBuilder && (
+        <VisualPolicyBuilder
+          currentPolicy={policy}
+          onApplyPolicy={handleApplyFullPolicy}
+          isApplying={isUpdating}
+          onClose={() => setShowVisualBuilder(false)}
+        />
+      )}
 
       {/* Split Layout: Merchant Policy vs Commerce Truth */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -98,20 +124,29 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   Immutable versioned policy governing autonomous transactions
                 </p>
               </div>
-              <Button
-                variant={showMutationForm ? 'ghost' : 'glass'}
-                size="xs"
-                onClick={() => setShowMutationForm(!showMutationForm)}
-              >
-                {showMutationForm ? 'CANCEL' : 'MUTATE (PUT)'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="glass"
+                  size="xs"
+                  onClick={() => setShowVisualBuilder(true)}
+                >
+                  STUDIO (GUI)
+                </Button>
+                <Button
+                  variant={showMutationForm ? 'ghost' : 'glass'}
+                  size="xs"
+                  onClick={() => setShowMutationForm(!showMutationForm)}
+                >
+                  {showMutationForm ? 'CANCEL' : 'QUICK CAP'}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-4 font-mono text-xs">
               {showMutationForm && (
                 <div className="p-4 rounded-lg bg-[rgba(200,178,122,0.08)] border border-[#C8B27A]/40 space-y-3 backdrop-blur-md">
                   <span className="text-[#C8B27A] font-semibold block uppercase text-[11px] tracking-wider">
-                    Draft Policy Mutation (Real Backend PUT)
+                    Quick Cap Mutation (Real Backend PUT)
                   </span>
                   <div>
                     <label className="text-[10px] text-[#7A776F] uppercase block mb-1 tracking-wider">
@@ -131,7 +166,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     onClick={handleSubmitMutation}
                     className="w-full"
                   >
-                    CONFIRM & PERSIST TO pol_v2.0.0
+                    CONFIRM & PERSIST
                   </Button>
                 </div>
               )}
@@ -161,8 +196,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     </div>
                   </div>
                   <div className="flex justify-between items-center py-2">
+                    <span className="text-[#7A776F] uppercase text-[10px] tracking-wider">MINIMUM MARGIN:</span>
+                    <span className="text-[#6F9B83] font-semibold">{policy.min_margin_percentage || 15}%</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
                     <span className="text-[#7A776F] uppercase text-[10px] tracking-wider">AUTO REFUND ON FAILURE:</span>
-                    <span className="text-[#6F9B83] font-semibold">ENABLED</span>
+                    <span className={policy.auto_refund_on_fulfillment_failure !== false ? "text-[#6F9B83] font-semibold" : "text-[#A76565] font-semibold"}>
+                      {policy.auto_refund_on_fulfillment_failure !== false ? "ENABLED" : "DISABLED"}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-[#7A776F] uppercase text-[10px] tracking-wider">EFFECTIVE TIMESTAMP:</span>

@@ -180,20 +180,24 @@ export const App: React.FC = () => {
     }
   };
 
-  // Mutate policy handler for Screen 05
-  const handleUpdatePolicy = async (newCapInr: number) => {
+  // Mutate policy handler for Screen 05 (Visual Studio & Quick Cap)
+  const handleUpdatePolicy = async (policyOrCap: number | MerchantPolicy) => {
     setIsUpdatingPolicy(true);
     try {
-      const versionNum = Date.now().toString().slice(-3);
-      await policyApi.updatePolicy({
-        policy_version: `pol_v2.${versionNum}.0`,
-        effective_at: Math.floor(Date.now() / 1000),
-        merchant_id: policy?.merchant_id || 'merch_acme_electronics_01',
-        max_transaction_amount: newCapInr * 100,
-        allowed_categories: ['electronics', 'furniture'],
-        auto_refund_on_fulfillment_failure: true,
-        min_margin_percentage: 15,
-      });
+      if (typeof policyOrCap === 'number') {
+        const versionNum = Date.now().toString().slice(-3);
+        await policyApi.updatePolicy({
+          policy_version: `pol_v2.${versionNum}.0`,
+          effective_at: Math.floor(Date.now() / 1000),
+          merchant_id: policy?.merchant_id || 'merch_acme_electronics_01',
+          max_transaction_amount: policyOrCap * 100,
+          allowed_categories: policy?.allowed_categories || ['electronics', 'furniture'],
+          auto_refund_on_fulfillment_failure: policy?.auto_refund_on_fulfillment_failure ?? true,
+          min_margin_percentage: policy?.min_margin_percentage || 15,
+        });
+      } else {
+        await policyApi.updatePolicy(policyOrCap);
+      }
       await fetchAllData();
     } catch (err: any) {
       if (err.statusCode === 401) {
