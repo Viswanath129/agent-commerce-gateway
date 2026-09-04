@@ -4,6 +4,9 @@
   "description": "Merchant-Side Control Plane for AI-Originated Transactions on Razorpay (Track 01)",
   "main": "dist/src/server.js",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build:ui": "vite build",
