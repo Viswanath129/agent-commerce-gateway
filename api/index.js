@@ -48683,17 +48683,30 @@ async function getFastifyApp() {
 async function handler(req, res) {
   try {
     const app = await getFastifyApp();
-    await new Promise((resolve, reject) => {
-      res.on("finish", () => resolve());
-      res.on("error", (err) => reject(err));
-      app.server.emit("request", req, res);
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    const payload = chunks.length > 0 ? Buffer.concat(chunks) : void 0;
+    const response = await app.inject({
+      method: req.method || "GET",
+      url: req.url || "/",
+      headers: req.headers,
+      payload
     });
+    res.statusCode = response.statusCode;
+    for (const [header, val] of Object.entries(response.headers)) {
+      if (val !== void 0) {
+        res.setHeader(header, val);
+      }
+    }
+    res.end(response.rawPayload);
   } catch (err) {
     if (!res.headersSent) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({
-        error: "FUNCTION_INVOCATION_FAILED",
+        error: "SERVERLESS_HANDLER_ERROR",
         message: err?.message || String(err)
       }));
     }
