@@ -73,13 +73,13 @@ TAMPER-EVIDENT SHA-256 AUDIT LEDGER (Provenance Verification)
 
 ---
 
-## 4-Minute Demonstration
+## Demonstration
 
-1. **Authorized Purchase (0:30):** Valid agent checkout executes in 397.43 ms cold-start (3–10 ms warm latency) with Ed25519 verification and database pricing.
-2. **Budget Overstep (1:10):** Agent requests ₹14,160.00 against ₹5,000.00 cap; blocked at Phase 4 (`HTTP 403`). Razorpay is never touched.
-3. **Double-Spend Race (1:50):** 10 parallel subagents race for residual funds; exactly 1 succeeds, 9 blocked (`HTTP 409`).
-4. **Mandate Revocation (2:40):** Human principal revokes mandate; subsequent checkout attempts return `HTTP 403 MANDATE_REVOKED`.
-5. **Audit & Reconciliation (3:20):** Duplicate webhook rejected (`200 DUPLICATE_IGNORED`); SHA-256 ledger validates 271 blocks intact.
+1. **Authorized Purchase:** Valid agent checkout executes in 397.43 ms cold-start (3–10 ms warm latency) with Ed25519 verification and database pricing.
+2. **Budget Overstep :** Agent requests ₹14,160.00 against ₹5,000.00 cap; blocked at Phase 4 (`HTTP 403`). Razorpay is never touched.
+3. **Double-Spend Race:** 10 parallel subagents race for residual funds; exactly 1 succeeds, 9 blocked (`HTTP 409`).
+4. **Mandate Revocation:** Human principal revokes mandate; subsequent checkout attempts return `HTTP 403 MANDATE_REVOKED`.
+5. **Audit & Reconciliation:** Duplicate webhook rejected (`200 DUPLICATE_IGNORED`); SHA-256 ledger validates 271 blocks intact.
 
 > **“The agent decided what it wanted. The control plane decided whether it was allowed.”**
 
