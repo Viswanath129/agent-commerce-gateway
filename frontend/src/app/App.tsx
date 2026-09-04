@@ -11,7 +11,6 @@ import {
   healthApi,
   demoApi,
   compatibilityApi,
-  apiClient,
 } from '../lib/api/index.js';
 import type {
   DashboardMetrics,
@@ -59,13 +58,10 @@ export const App: React.FC = () => {
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [matrix, setMatrix] = useState<CompatibilityMatrixResponse | null>(null);
 
-  // Loading & Action states
+  // UI state
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [authError, setAuthError] = useState<{ status: 401 | 403, message: string } | null>(null);
-  const [hasOperatorToken, setHasOperatorToken] = useState(() => apiClient.hasAuthToken());
-  const [operatorToken, setOperatorToken] = useState('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncTimestamp, setSyncTimestamp] = useState<string>('');
+  const [syncTimestamp, setSyncTimestamp] = useState<string>('Just now');
   const [isExecutingScenario, setIsExecutingScenario] = useState<boolean>(false);
   const [isRevokingMandate, setIsRevokingMandate] = useState<boolean>(false);
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState<boolean>(false);
@@ -73,7 +69,7 @@ export const App: React.FC = () => {
   const [concurrencyResult, setConcurrencyResult] = useState<{ admitted: string; blocked: string } | null>(null);
   const [isVerifyingAudit, setIsVerifyingAudit] = useState<boolean>(false);
 
-  // Unified Live Fetch Function (Zero-Mock from SQLite)
+  // Sync gateway data from real backend endpoints
   const fetchAllData = useCallback(async () => {
     try {
       const [
@@ -136,12 +132,12 @@ export const App: React.FC = () => {
     const interval = setInterval(fetchAllData, 4000);
     return () => clearInterval(interval);
   }, [fetchAllData]);
-  // Manual Sync handler
+
+  // Manual Sync handler
   const handleManualSync = async () => {
     setIsSyncing(true);
     await fetchAllData();
   };
-
 
   // Scenario runner for Screen 02
   const handleRunScenario = async (scenario: DemoScenarioType): Promise<DemoScenarioResult> => {
@@ -151,11 +147,7 @@ export const App: React.FC = () => {
       await fetchAllData();
       return res;
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
-        setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
-      }
+      console.error('Scenario error:', err);
       throw err;
     } finally {
       setIsExecutingScenario(false);
@@ -172,11 +164,7 @@ export const App: React.FC = () => {
       });
       await fetchAllData();
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
-        setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
-      }
+      console.error('Mandate revocation error:', err);
       throw err;
     } finally {
       setIsRevokingMandate(false);
@@ -203,11 +191,7 @@ export const App: React.FC = () => {
       }
       await fetchAllData();
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
-        setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
-      }
+      console.error('Policy update error:', err);
       throw err;
     } finally {
       setIsUpdatingPolicy(false);
@@ -225,11 +209,7 @@ export const App: React.FC = () => {
       });
       await fetchAllData();
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
-        setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
-      }
+      console.error('Concurrency error:', err);
       throw err;
     } finally {
       setIsTestingConcurrency(false);
@@ -244,86 +224,12 @@ export const App: React.FC = () => {
       setAuditIntegrity(res);
       await fetchAllData();
     } catch (err: any) {
-      if (err.statusCode === 401) {
-        setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
-        setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
-      }
+      console.error('Audit verification error:', err);
       throw err;
     } finally {
       setIsVerifyingAudit(false);
     }
   };
-
-  if (!hasOperatorToken) {
-    return (
-      <div className="min-h-screen bg-[#10100F] flex items-center justify-center text-[#F2EEE4] font-mono p-6">
-        <form className="w-full max-w-lg p-8 border border-[#302F2B] bg-[#181816] shadow-2xl space-y-6" onSubmit={(event) => {
-          event.preventDefault();
-          if (!operatorToken.trim()) return;
-          apiClient.setAuthToken(operatorToken);
-          setOperatorToken('');
-          setHasOperatorToken(true);
-        }}>
-          <div className="space-y-2">
-            <p className="text-[10px] tracking-[0.2em] text-[#C8B27A] uppercase">ACG Merchant Console</p>
-            <h1 className="font-display text-2xl tracking-wider uppercase">Operator authentication required</h1>
-            <p className="text-xs text-[#B8B3A7] leading-relaxed">Enter a server-issued merchant bearer token. It is held only for this browser session and is never compiled into the frontend.</p>
-          </div>
-          <input aria-label="Merchant bearer token" type="password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} className="w-full p-3 bg-[#10100F] border border-[#302F2B] text-sm" autoComplete="off" required />
-          <button type="submit" className="w-full py-3 bg-[#C8B27A] text-[#10100F] font-semibold text-xs tracking-wider uppercase">Open control plane</button>
-        </form>
-      </div>
-    );
-  }
-
-  if (authError) {
-    const isAuth = authError.status === 401;
-    const isForbidden = authError.status === 403;
-    const title = isAuth ? 'AUTHENTICATION REQUIRED' : isForbidden ? 'ACCESS FORBIDDEN [SCOPE INSUFFICIENT]' : 'GATEWAY COMMUNICATION ERROR';
-    const recoveryAction = isAuth 
-      ? 'Enter a valid server-issued merchant bearer token. Browser builds never contain server-side credentials.'
-      : 'Verify that your merchant admin role includes "merchant:read", "merchant:policy:write", and "merchant:mandate:revoke" privileges.';
-
-    return (
-      <div className="min-h-screen bg-[#10100F] flex flex-col items-center justify-center text-[#F2EEE4] font-mono p-6 text-center">
-        <div className="w-full max-w-xl p-8 border border-[#302F2B] bg-[#181816] shadow-2xl space-y-6">
-          <div className="flex items-center justify-center gap-3">
-            <span className="w-3 h-3 bg-[#A76565] inline-block" />
-            <h1 className="font-display text-2xl text-[#F2EEE4] tracking-wider uppercase font-semibold">
-              {title}
-            </h1>
-          </div>
-
-          <p className="text-xs text-[#B8B3A7] leading-relaxed">
-            The Agent Commerce Gateway control plane requires authenticated merchant authority.
-          </p>
-
-          <div className="p-4 border border-[#302F2B] bg-[#10100F] text-left space-y-3 text-xs">
-            <div>
-              <span className="text-[10px] text-[#77746C] uppercase block tracking-wider">HTTP Status & Code</span>
-              <span className="text-[#A76565] font-bold">HTTP {authError.status} // {isAuth ? 'UNAUTHORIZED' : 'FORBIDDEN'}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-[#77746C] uppercase block tracking-wider">Error Details</span>
-              <code className="text-[#F2EEE4] text-[11px] block break-all font-mono">{authError.message}</code>
-            </div>
-            <div className="pt-2 border-t border-[#302F2B]">
-              <span className="text-[10px] text-[#C8B27A] uppercase block tracking-wider font-semibold">Remediation Action</span>
-              <span className="text-[#B8B3A7] text-[11px] leading-normal">{recoveryAction}</span>
-            </div>
-          </div>
-
-          <button 
-            onClick={() => { setAuthError(null); fetchAllData(); }}
-            className="w-full py-3 bg-[#C8B27A] text-[#10100F] font-semibold text-xs tracking-wider uppercase hover:bg-[#E1D2A8] active:bg-[#B8A36C] transition-colors cursor-pointer"
-          >
-            RETRY GATEWAY CONNECTION
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <AppShell

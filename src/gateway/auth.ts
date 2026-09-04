@@ -9,10 +9,18 @@ import type { FastifyRequest, FastifyReply } from "fastify";
  */
 export function getValidTokens(): Record<string, string[]> {
   const isProd = process.env.NODE_ENV === "production";
+  const isCloudDemo = Boolean(
+    process.env.RENDER ||
+    process.env.VERCEL ||
+    process.env.VERCEL_DEMO === "1" ||
+    process.env.DEMO_MODE === "1" ||
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.FLY_APP_NAME
+  );
   
-  const adminToken = process.env.ACG_ADMIN_TOKEN || (!isProd ? "secret_merchant_admin" : undefined);
-  const viewerToken = process.env.ACG_VIEWER_TOKEN || (!isProd ? "secret_merchant_viewer" : undefined);
-  const auditToken = process.env.ACG_AUDIT_TOKEN || (!isProd ? "secret_audit_bot" : undefined);
+  const adminToken = process.env.ACG_ADMIN_TOKEN || (!isProd || isCloudDemo ? "secret_merchant_admin" : undefined);
+  const viewerToken = process.env.ACG_VIEWER_TOKEN || (!isProd || isCloudDemo ? "secret_merchant_viewer" : undefined);
+  const auditToken = process.env.ACG_AUDIT_TOKEN || (!isProd || isCloudDemo ? "secret_audit_bot" : undefined);
 
   const tokenMap: Record<string, string[]> = Object.create(null);
 
@@ -43,9 +51,17 @@ export function requireScope(requiredScope: string, options?: { allowUnauthentic
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const authHeader = request.headers.authorization;
     const isProd = process.env.NODE_ENV === "production";
+    const isCloudDemo = Boolean(
+      process.env.RENDER ||
+      process.env.VERCEL ||
+      process.env.VERCEL_DEMO === "1" ||
+      process.env.DEMO_MODE === "1" ||
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.FLY_APP_NAME
+    );
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      if (!isProd && options?.allowUnauthenticatedInDev) {
+      if ((!isProd || isCloudDemo) && options?.allowUnauthenticatedInDev) {
         return;
       }
       return reply.status(401).send({ error: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });

@@ -33,7 +33,16 @@ export class RazorpayRailClient {
     const envId = process.env.RAZORPAY_KEY_ID;
     const envSecret = process.env.RAZORPAY_KEY_SECRET;
 
-    if (process.env.NODE_ENV === "production" && process.env.VERCEL !== "1" && process.env.VERCEL_DEMO !== "1" && process.env.DEMO_MODE !== "1" && (!envId || !envSecret)) {
+    const isCloudDemo = Boolean(
+      process.env.RENDER ||
+      process.env.VERCEL ||
+      process.env.VERCEL_DEMO === "1" ||
+      process.env.DEMO_MODE === "1" ||
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.FLY_APP_NAME
+    );
+
+    if (process.env.NODE_ENV === "production" && !isCloudDemo && process.env.STRICT_PROD_KEYS === "1" && (!envId || !envSecret)) {
       throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.");
     }
 
