@@ -32,8 +32,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({
       error: "FUNCTION_INITIALIZATION_ERROR",
-      message: err?.message || String(err),
-      stack: process.env.NODE_ENV === "development" ? err?.stack : undefined
+      message: err?.message || String(err)
     }));
   }
 }
