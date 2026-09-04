@@ -33,8 +33,26 @@ export class ApiClient {
   constructor(baseUrl: string = '', defaultTimeoutMs: number = 10000, defaultAuthToken: string = '') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.defaultTimeoutMs = defaultTimeoutMs;
-    // For LOCAL DEVELOPMENT only, allow Vite env token.
-    this.defaultAuthToken = defaultAuthToken || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_ACG_MERCHANT_TOKEN) || '';
+    // Credentials are supplied by the authenticated operator at runtime, never
+    // embedded into a Vite build or exposed via VITE_* environment variables.
+    this.defaultAuthToken = defaultAuthToken || this.readSessionToken();
+  }
+
+  private readSessionToken(): string {
+    if (typeof window === 'undefined') return '';
+    return window.sessionStorage.getItem('acg.dashboard.bearer') || '';
+  }
+
+  public setAuthToken(token: string): void {
+    this.defaultAuthToken = token.trim();
+    if (typeof window !== 'undefined') {
+      if (this.defaultAuthToken) window.sessionStorage.setItem('acg.dashboard.bearer', this.defaultAuthToken);
+      else window.sessionStorage.removeItem('acg.dashboard.bearer');
+    }
+  }
+
+  public hasAuthToken(): boolean {
+    return Boolean(this.defaultAuthToken);
   }
 
   public setBaseUrl(url: string): void {

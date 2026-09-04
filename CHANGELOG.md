@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ---
 
 ## [Unreleased]
+- Added a Vercel same-origin Fastify adapter and explicit non-durable
+  `VERCEL_DEMO=1` guard; Vercel is not represented as production financial
+  persistence.
+- Removed browser-build merchant-token configuration. Dashboard credentials are
+  supplied by the operator at runtime and retained only for the browser session.
+- Added Vercel deployment, security, persistence, and verification
+  documentation without claiming an undeployed URL.
 - Distributed PostgreSQL persistence and Redis Redlock cluster coordination (production roadmap).
 - Hardware Security Module (KMS / Vault) key management integration.
 

@@ -21,7 +21,7 @@ steps:
       - '--port'
       - '3000'
       - '--set-env-vars'
-      - 'NODE_ENV=production,PORT=3000,HOST=0.0.0.0,ACG_ADMIN_TOKEN=secret_merchant_admin'
+      - 'NODE_ENV=production,PORT=3000,HOST=0.0.0.0'
 
 images:
   - 'gcr.io/$PROJECT_ID/acg-gateway:$COMMIT_SHA'

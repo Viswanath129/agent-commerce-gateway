@@ -76,5 +76,4 @@ export const TENANT_CONFIG = {
   merchantName: 'Acme Electronics Ltd.',
   environment: 'SANDBOX / LIVE BACKEND',
   rails: 'RAZORPAY TEST / SANDBOX',
-  authSecret: 'secret_merchant_admin',
 };

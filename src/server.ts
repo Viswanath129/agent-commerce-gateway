@@ -29,7 +29,7 @@ export async function buildApp(customDb?: SqliteDatabase, customPolicy?: Merchan
     },
   });
 
-  const dbPath = process.env.DATABASE_PATH || (process.env.VERCEL ? "/tmp/acg_gateway.db" : "./data/acg_gateway.db");
+  const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";
   const db = customDb || initDatabase(dbPath);
   const policy = customPolicy || defaultPolicy;
 

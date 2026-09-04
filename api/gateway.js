@@ -48619,7 +48619,7 @@ async function buildApp(customDb, customPolicy) {
       level: process.env.NODE_ENV === "test" ? "silent" : "info"
     }
   });
-  const dbPath = process.env.DATABASE_PATH || (process.env.VERCEL ? "/tmp/acg_gateway.db" : "./data/acg_gateway.db");
+  const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";
   const db = customDb || initDatabase(dbPath);
   const policy = customPolicy || defaultPolicy;
   app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
@@ -48662,13 +48662,21 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
 
 // api/server_entry.ts
 var fastifyAppPromise = null;
+function requestUrlForGateway(req) {
+  const incoming = new URL(req.url || "/", "http://acg.local");
+  const routedPath = incoming.searchParams.get("path");
+  if (!routedPath) return incoming.pathname + incoming.search;
+  incoming.searchParams.delete("path");
+  return `${routedPath}${incoming.searchParams.toString() ? `?${incoming.searchParams}` : ""}`;
+}
 async function getFastifyApp() {
   if (!fastifyAppPromise) {
     fastifyAppPromise = (async () => {
       process.env.VERCEL = "1";
-      if (!process.env.DATABASE_PATH) {
-        process.env.DATABASE_PATH = "/tmp/acg_gateway.db";
+      if (process.env.VERCEL_DEMO !== "1") {
+        throw new Error("VERCEL_DEMO=1 is required: Vercel has no durable shared SQLite filesystem. Use durable shared storage before enabling a financial production deployment.");
       }
+      process.env.DATABASE_PATH = ":memory:";
       try {
         const { app } = await buildApp();
         await app.ready();
@@ -48691,7 +48699,7 @@ async function handler(req, res) {
     const payload = chunks.length > 0 ? Buffer.concat(chunks) : void 0;
     const response = await app.inject({
       method: req.method || "GET",
-      url: req.url || "/",
+      url: requestUrlForGateway(req),
       headers: req.headers,
       payload
     });

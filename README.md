@@ -123,6 +123,20 @@ npm run build
 npm start
 ```
 
+## Vercel deployment qualification
+
+The repository includes a same-origin Vercel adapter: Vite static assets are
+served from `public/` and real gateway requests are handled by the existing
+Fastify control plane through `/api/gateway`. The browser never receives a
+server secret; dashboard operators enter a bearer token at runtime and it is
+kept only for that browser session.
+
+Vercel's filesystem is not durable shared storage. Its adapter requires the
+explicit `VERCEL_DEMO=1` mode and uses in-memory SQLite, so it is a
+demonstration deployment only—not a durable financial ledger or live
+settlement environment. See [Vercel integration](docs/integrations/VERCEL.md)
+and the [deployment runbook](docs/operations/VERCEL_DEPLOYMENT.md).
+
 ---
 
 ## Protocol Compatibility & Feature Status

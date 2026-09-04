@@ -3,11 +3,35 @@
   "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/(v1|api|adapters|dashboard/metrics|webhook)(.*)",
-      "destination": "/api/gateway"
+      "source": "/v1/(.*)",
+      "destination": "/api/gateway?path=/v1/$1"
+    },
+    {
+      "source": "/dashboard/(.*)",
+      "destination": "/api/gateway?path=/dashboard/$1"
+    },
+    {
+      "source": "/catalog",
+      "destination": "/api/gateway?path=/catalog"
+    },
+    {
+      "source": "/webhooks/(.*)",
+      "destination": "/api/gateway?path=/webhooks/$1"
+    },
+    {
+      "source": "/audit/(.*)",
+      "destination": "/api/gateway?path=/audit/$1"
+    },
+    {
+      "source": "/adapters/(.*)",
+      "destination": "/api/gateway?path=/adapters/$1"
     },
     {
       "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

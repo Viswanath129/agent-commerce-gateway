@@ -16,7 +16,7 @@ The ACG Luxury Edition Dashboard SPA (`/public/index.html`) operates under stric
 
 ## 2. Interface Verification & Accessibility
 
-* **Authentication & Scopes:** Protected routes enforce bearer token headers (`VITE_ACG_MERCHANT_TOKEN` in local sandbox mode). Unauthenticated requests render actionable 401 error states.
+* **Authentication & Scopes:** Protected routes enforce bearer token headers. The operator supplies a server-issued token at runtime; no browser-build environment variable contains a credential. Unauthenticated requests render an actionable authentication boundary.
 * **Component Styling:** Luxury Editorial FinTech styling using Tailwind CSS v4, Framer Motion animations, and Lucide icons.
 * **Touch Targets & Accessibility:** Compliant with 44x44px minimum touch targets, WCAG AA contrast ratios, and `prefers-reduced-motion` media queries.
 * **Quality Status:** **PASS** (Zero console errors, zero dropped network calls during verified flows).

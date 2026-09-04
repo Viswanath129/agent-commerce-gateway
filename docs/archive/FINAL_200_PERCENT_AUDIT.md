@@ -34,7 +34,7 @@ The threat model accounts for untrusted/hallucinating LLM agents, malicious suba
 ## 4. Authentication
 * **Agent Transport:** Ingress adapters validate client tokens or DID signatures.
 * **Merchant API:** Scoped bearer tokens (`merchant:read`, `merchant:policy:write`, `merchant:mandate:revoke`, `audit:read`). Unauthenticated requests are rejected with `401 Unauthorized`.
-* **Sandbox Token Note:** `VITE_ACG_MERCHANT_TOKEN` is designated as a local/sandbox convenience credential, not an enterprise production secret.
+* **Historical token note:** Browser-build token injection has been removed. Dashboard credentials are now supplied by an operator at runtime and are not emitted into static assets.
 
 ---
 

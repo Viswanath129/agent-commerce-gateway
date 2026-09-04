@@ -125,13 +125,13 @@ The ACG architecture strictly enforces separation of concerns between **Public A
 - **Webhook (`/webhooks/razorpay`)**: Unauthenticated endpoint. Security is guaranteed via timing-safe HMAC signature verification.
 - **Merchant Dashboard (`/dashboard/*`, `/v1/merchant/*`, `/v1/mandates/revoke`)**: Strictly protected by `Authorization: Bearer <token>` enforcing scoped capabilities (e.g. `merchant:read`, `merchant:policy:write`).
 
-### Local Sandbox vs Production Deployment
+### Local Sandbox and Deployment
 
-1. **Local Sandbox Setup**
-   The React frontend uses `import.meta.env.VITE_ACG_MERCHANT_TOKEN` to inject the dashboard credential into the local Vite bundle. This is perfectly acceptable for a local sandbox or buildathon demo environment, allowing seamless testing of the merchant control plane without building a full login system.
-
-2. **Production Architecture Warning**
-   A Vite environment variable prefixed with `VITE_` is inherently exposed to browser-side code. The `VITE_ACG_MERCHANT_TOKEN` must **NOT** be used as a security mechanism in a true production deployment. In production, this credential architecture must be replaced with a proper authenticated session model (e.g., HttpOnly cookies, OIDC/OAuth2 session flows, or backend-for-frontend token exchange) to ensure the merchant administrative credential is never exposed to the client browser.
+The dashboard does not read bearer credentials from Vite environment variables.
+An operator supplies a server-issued token at runtime and the browser retains it only
+in `sessionStorage`. This avoids compiling a credential into static assets. A
+production identity integration (for example, an HttpOnly OIDC-backed session)
+remains the preferred replacement for direct bearer-token entry.
 
 ### Error UX
 - **401 Unauthorized**: Renders a full-screen `AUTHENTICATION REQUIRED` boundary, prompting the user to supply the credential.

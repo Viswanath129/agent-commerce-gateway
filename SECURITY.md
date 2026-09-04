@@ -34,3 +34,7 @@ The Agent Commerce Gateway (ACG) team takes security with paramount importance. 
 * **Dual-Resource Atomicity:** Budget allocations and inventory stock decrements execute in serialized ACID transactions.
 * **Tamper-Evident SHA-256 Hash Chain:** All state transitions and authorization decisions are committed to an append-only forward-chained SHA-256 audit ledger.
 * **Scope Disclaimer:** The 8 Critical/High findings identified during the independent remediation scope are verified closed via exact exploit replay. Production-scale distributed guarantees and live Razorpay-network behavior remain outside this evidence scope.
+* **Vercel Boundary:** The Vercel adapter starts only with explicit
+  `VERCEL_DEMO=1` and uses in-memory SQLite. This preserves request security
+  controls but is not durable financial-state infrastructure. Server bearer
+  credentials and Razorpay secrets must never be placed in `VITE_*` variables.

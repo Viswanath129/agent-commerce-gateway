@@ -11,6 +11,7 @@ import {
   healthApi,
   demoApi,
   compatibilityApi,
+  apiClient,
 } from '../lib/api/index.js';
 import type {
   DashboardMetrics,
@@ -61,6 +62,8 @@ export const App: React.FC = () => {
   // Loading & Action states
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<{ status: 401 | 403, message: string } | null>(null);
+  const [hasOperatorToken, setHasOperatorToken] = useState(() => apiClient.hasAuthToken());
+  const [operatorToken, setOperatorToken] = useState('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncTimestamp, setSyncTimestamp] = useState<string>('');
   const [isExecutingScenario, setIsExecutingScenario] = useState<boolean>(false);
@@ -252,12 +255,34 @@ export const App: React.FC = () => {
     }
   };
 
+  if (!hasOperatorToken) {
+    return (
+      <div className="min-h-screen bg-[#10100F] flex items-center justify-center text-[#F2EEE4] font-mono p-6">
+        <form className="w-full max-w-lg p-8 border border-[#302F2B] bg-[#181816] shadow-2xl space-y-6" onSubmit={(event) => {
+          event.preventDefault();
+          if (!operatorToken.trim()) return;
+          apiClient.setAuthToken(operatorToken);
+          setOperatorToken('');
+          setHasOperatorToken(true);
+        }}>
+          <div className="space-y-2">
+            <p className="text-[10px] tracking-[0.2em] text-[#C8B27A] uppercase">ACG Merchant Console</p>
+            <h1 className="font-display text-2xl tracking-wider uppercase">Operator authentication required</h1>
+            <p className="text-xs text-[#B8B3A7] leading-relaxed">Enter a server-issued merchant bearer token. It is held only for this browser session and is never compiled into the frontend.</p>
+          </div>
+          <input aria-label="Merchant bearer token" type="password" value={operatorToken} onChange={(event) => setOperatorToken(event.target.value)} className="w-full p-3 bg-[#10100F] border border-[#302F2B] text-sm" autoComplete="off" required />
+          <button type="submit" className="w-full py-3 bg-[#C8B27A] text-[#10100F] font-semibold text-xs tracking-wider uppercase">Open control plane</button>
+        </form>
+      </div>
+    );
+  }
+
   if (authError) {
     const isAuth = authError.status === 401;
     const isForbidden = authError.status === 403;
     const title = isAuth ? 'AUTHENTICATION REQUIRED' : isForbidden ? 'ACCESS FORBIDDEN [SCOPE INSUFFICIENT]' : 'GATEWAY COMMUNICATION ERROR';
     const recoveryAction = isAuth 
-      ? 'Export VITE_ACG_MERCHANT_TOKEN="secret_merchant_admin" in your client environment, or provide Authorization Bearer credentials.'
+      ? 'Enter a valid server-issued merchant bearer token. Browser builds never contain server-side credentials.'
       : 'Verify that your merchant admin role includes "merchant:read", "merchant:policy:write", and "merchant:mandate:revoke" privileges.';
 
     return (
