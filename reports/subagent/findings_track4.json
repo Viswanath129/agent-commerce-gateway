@@ -1,0 +1,292 @@
+{
+  "track": "Track 4: Resilience, Quality & Claim Audit (Workstreams N through P / Phases 16 through 22)",
+  "auditor": "worker_resilience_quality_2",
+  "predecessor": "worker_resilience_quality_1",
+  "timestamp": "2026-09-04T04:35:00Z",
+  "repository": "B:\\projects\\RAZOR PAY- Buildathon",
+  "commit": "23ba7772a3bf69303930af93486970131326fd4c",
+  "summary": {
+    "total_findings": 7,
+    "critical": 0,
+    "high": 2,
+    "medium": 1,
+    "low": 1,
+    "informational": 3
+  },
+  "evaluated_phases": [
+    "Phase 16: Chaos & Failure Safety (Workstream N)",
+    "Phase 17: Property & Invariant Testing (Workstream N)",
+    "Phase 18: Performance Verification (Workstream O)",
+    "Phase 19: Test Quality / False-Pass Audit (Workstream P)",
+    "Phase 20: Claim & Evidence Audit (Workstream P)",
+    "Phase 21: External Tool / Strix Disclosure (Workstream P)",
+    "Phase 22: Supply Chain Security (Workstream P)"
+  ],
+  "workstream_verdicts": {
+    "workstream_n_phase_16_chaos": {
+      "verdict": "FAIL-CLOSED CONFIRMED ON INFRASTRUCTURE / STATE MACHINE GAP ON WEBHOOK",
+      "db_locked_behavior": "FAIL-CLOSED (HTTP 500 ERR_SQLITE_ERROR, zero financial execution)",
+      "provider_timeout_behavior": "FAIL-CLOSED (HTTP 502 PAYMENT_RAIL_ERROR, atomic dual rollback of stock and budget)",
+      "provider_503_behavior": "FAIL-CLOSED (HTTP 502 PAYMENT_RAIL_ERROR, atomic dual rollback)",
+      "catalog_failure_behavior": "FAIL-CLOSED (HTTP 400 COMMERCE_TRUTH_REJECTION, zero reservation)",
+      "policy_failure_behavior": "FAIL-CLOSED (HTTP 403 CATEGORY_RESTRICTED, zero reservation)",
+      "duplicate_webhook_behavior": "FAIL-CLOSED (DUPLICATE_IGNORED, exactly 1 record)",
+      "delayed_webhook_behavior": "DEFECT IDENTIFIED (payment.captured after payment.failed mutates status without stock)",
+      "malformed_rail_response": "DEFECT IDENTIFIED (null razorpay_order_id committed to DB with HTTP 201)"
+    },
+    "workstream_n_phase_17_invariants": {
+      "verdict": "6/7 INVARIANTS INTACT / 1 INVARIANT PARTIALLY VIOLATED IN RUNTIME WEBHOOK",
+      "inv1_inventory_non_negative": "VERIFIED (Holds across 40 randomized stock-exhaustion purchases; stock >= 0 strictly preserved)",
+      "inv2_budget_within_authority": "VERIFIED IN ENGINE (Holds in reservation engine; bypassed only via router POST /v1/mandates conflict bug)",
+      "inv3_revoked_mandate_zero_auth": "VERIFIED (100% of revoked mandate checkout attempts returned HTTP 403 MANDATE_REVOKED)",
+      "inv4_duplicate_intent_bounded_execution": "VERIFIED (10/10 replays rejected with HTTP 409 DUPLICATE_INTENT_REPLAY; exactly 1 order session)",
+      "inv5_duplicate_webhook_single_mutation": "VERIFIED (Duplicate event IDs produce DUPLICATE_IGNORED and exactly 1 DB row)",
+      "inv6_denied_action_zero_execution": "VERIFIED (Denied checkouts create zero reservations and zero order sessions)",
+      "inv7_invalid_transition_zero_mutation": "PARTIALLY VIOLATED (FinancialStateMachine class defines strict map, but router webhook handler bypasses it)"
+    },
+    "workstream_o_phase_18_performance": {
+      "verdict": "OBSERVED & CLARIFIED",
+      "canonical_baseline": "303.81 ms (Documented reference in AGENTS.md and README)",
+      "empirical_measurements": [
+        { "run": "worker_resilience_quality_1", "cold_total_ms": 282.96, "boot_ms": 237.45, "checkout_ms": 41.83 },
+        { "run": "worker_resilience_quality_2", "cold_total_ms": 301.98, "boot_ms": 250.56, "checkout_ms": 47.42 }
+      ],
+      "measured_scope": "In-memory Fastify injection (app.inject) against :memory: SQLite and offline deterministic mock order generator. Does NOT include OS TCP stack, network roundtrips, or live Razorpay API latency.",
+      "boot_overhead_percentage": "82.9% of total time is Fastify framework/plugin boot, not transaction processing",
+      "warm_transaction_latency": "3 ms - 10 ms per transaction once gateway is booted"
+    },
+    "workstream_p_phase_19_test_quality": {
+      "verdict": "HIGH CODE QUALITY WITH DISCONNECTED PDP TEST GAP",
+      "total_tests": "102 passing tests across 12 test files (duration 3.72s)",
+      "assertion_quality": "High. Tests verify real cryptographic signatures, database state, and concurrency locks.",
+      "false_pass_vulnerability": "DETECTED. v2_control_plane.test.ts:95-122 tests pdp.evaluateIntent directly, passing while POST /v1/agent/checkout bypasses PDP entirely."
+    },
+    "workstream_p_phase_20_claim_taxonomy": {
+      "77_tests_passing": "TESTED / OBSERVED (Stale claim: actually 102 / 102 passing)",
+      "19_pentests_blocked": "VERIFIED (19 / 19 passed in npm run pentest)",
+      "307_audit_blocks": "VERIFIED (307 chained SHA-256 blocks verified across 3 SQLite ledgers)",
+      "303ms_benchmark": "OBSERVED / TESTED (In-memory cold boot test)",
+      "razorpay_sandbox": "TESTED (Deterministic Mock Sandbox) / ADAPTER READY (Live)",
+      "mcp_adapter": "ADAPTER READY",
+      "a2a_adapter": "ADAPTER READY",
+      "acp_adapter": "ADAPTER READY",
+      "ap2_adapter": "ADAPTER READY",
+      "ucp_adapter": "ADAPTER READY",
+      "tap_adapter": "DESIGNED",
+      "vulcan_intelligence": "DESIGNED / ADAPTER READY (Architecture-ready telemetry; no public API exists)",
+      "production_readiness": "PRODUCTION TARGET / DESIGNED (Single-process SQLite; requires Postgres/Redis for multi-node)"
+    },
+    "workstream_p_phase_21_strix_disclosure": {
+      "strix_binary_executed": false,
+      "strix_status": "STRIX-INFORMED METHODOLOGY (Not an Independent Strix Scan)",
+      "disclosure_enforced": true
+    },
+    "workstream_p_phase_22_supply_chain": {
+      "dependencies_count": 15,
+      "dev_dependencies_count": 9,
+      "dangerous_install_scripts": "NONE (No preinstall/postinstall hooks in package.json)",
+      "crypto_library": "@noble/ed25519 (Audited, secure, constant-time)",
+      "ci_permissions_hardening": "DEFECT IDENTIFIED (.github/workflows/ci.yml lacks explicit permissions block)"
+    }
+  },
+  "findings": [
+    {
+      "id": "SEC-TRK4-001",
+      "severity": "HIGH",
+      "title": "Out-of-Order / Delayed Webhook Event Triggers Fulfillment Dispatch on Previously Released or Failed Order Sessions",
+      "phase": "Phase 16: Chaos & Failure Safety & Phase 17: Property & Invariant Testing (Workstream N)",
+      "location": "src/rails/webhook.ts:106-130, src/gateway/router.ts:1168-1180",
+      "observation": "When an order receives a payment.failed webhook event, RazorpayWebhookProcessor.processEvent executes reservationEngine.releaseReservation, which restores mandate budget, restores SKU inventory, and sets the reservation status to 'RELEASED'. If an out-of-order, delayed, or replayed payment.captured webhook event arrives afterwards with a distinct event_id, the processor updates order_sessions.status directly to 'PAYMENT_CAPTURED' via SQL query UPDATE order_sessions SET status = 'PAYMENT_CAPTURED' WHERE intent_id = ?. It then immediately invokes triggerFulfillment(intentId, reservationId, paymentId). The processor does not check whether the current session status is a terminal failed state, nor does it check whether the inventory reservation was already released.",
+      "attack_reproduction": "1. Complete a checkout for SKU-MOUSE-PRO (reservation HELD).\n2. Dispatch a payment.failed webhook with event_id 'evt_fail_01'. Database updates session to PAYMENT_FAILED and sets reservation to RELEASED.\n3. Dispatch a delayed payment.captured webhook with event_id 'evt_late_cap_02'.\n4. Database accepts the webhook (HTTP 200 PROCESSED), sets session status to 'PAYMENT_CAPTURED', and triggers fulfillment dispatch, while the underlying reservation remains in 'RELEASED' status with stock restored.",
+      "expected": "The webhook processing pipeline must enforce monotonic state transitions via FinancialStateMachine.validateTransition and reject any transition from terminal states (PAYMENT_FAILED, REFUNDED, CANCELLED). If commitReservation fails or returns false (reservation is not HELD), the processor must halt fulfillment dispatch and flag the order for manual review.",
+      "actual": "Runtime accepts payment.captured after payment.failed, transitions session to PAYMENT_CAPTURED, and dispatches fulfillment without holding an active inventory reservation.",
+      "impact": "HIGH. Risk of phantom order fulfillment, inventory overselling, physical fulfillment of unbacked orders, and financial/physical ledger divergence.",
+      "evidence": "Empirical chaos test CHAOS-07 in .agents/worker_resilience_quality_2/phase16_chaos_harness.ts confirmed: Reservation status remained 'RELEASED' while order_sessions transitioned to 'PAYMENT_CAPTURED'.",
+      "recommendation": "In src/rails/webhook.ts lines 105-130: 1. Validate state transition using FinancialStateMachine.validateTransition(orderSession.status, 'PAYMENT_CAPTURED'). Reject invalid transitions with HTTP 409 or return { status: 'ERROR', message: 'Illegal transition from terminal state' }. 2. Require reservationEngine.commitReservation to succeed before calling triggerFulfillment.",
+      "regression_test_required": "test_delayed_captured_webhook_rejected_on_failed_session: Verify that delivering payment.captured after payment.failed returns an error and prevents fulfillment dispatch."
+    },
+    {
+      "id": "SEC-TRK4-002",
+      "severity": "HIGH",
+      "title": "Disconnected Governance Plane False-Pass Risk: V2 Control Plane Unit Tests Test Isolated PDP While Ingress Checkout Bypasses PDP",
+      "phase": "Phase 19: Test Quality / False-Pass Audit (Workstream P)",
+      "location": "src/core/__tests__/v2_control_plane.test.ts:95-122, src/gateway/router.ts:783-803",
+      "observation": "In src/core/__tests__/v2_control_plane.test.ts, test '1.2 Blocks checkout when Agent Principal is SUSPENDED or REVOKED' directly calls pdp.evaluateIntent() in isolation, which evaluates the agent principal status and returns DENY (AGENT_SUSPENDED). This test passes (10/10 passing in suite). However, inspection of the actual live HTTP checkout ingress route in src/gateway/router.ts lines 783-803 reveals that POST /v1/agent/checkout calls legacy policyEngine.evaluate() rather than pdp.evaluateIntent(). As a consequence, revoked and suspended agents can successfully execute live checkout transactions over HTTP, even though the unit test suite reports green.",
+      "attack_reproduction": "1. Run vitest on v2_control_plane.test.ts: Test '1.2 Blocks checkout when Agent Principal is SUSPENDED or REVOKED' passes.\n2. In runtime, register an agent with status 'REVOKED'.\n3. Send an HTTP POST to /v1/agent/checkout with a signed mandate.\n4. Router executes policyEngine.evaluate(), which passes.\n5. Router acquires reservation and creates Razorpay order, returning HTTP 201 Created.",
+      "expected": "Unit and integration tests must exercise the live HTTP ingress endpoints (POST /v1/agent/checkout and POST /v1/agent/ingress/:protocol) to verify that agent status, trust level, and capability limits are strictly enforced during live checkout.",
+      "actual": "Unit test evaluates PDP in isolation and passes, creating a dangerous false-pass impression that revoked agents are blocked from commercial execution.",
+      "impact": "HIGH. False sense of security in automated test suite; rogue or compromised agents continue to authorize transactions despite automated tests passing.",
+      "evidence": "v2_control_plane.test.ts line 119 invokes pdp.evaluateIntent(intent, defaultPolicy, 'agent_rogue_01') directly, while router.ts line 784 invokes policyEngine.evaluate(intent.mandate, truthResult.totalAmount, truthResult.categories, activePolicy.merchant_id).",
+      "recommendation": "Wire POST /v1/agent/checkout to pdp.evaluateIntent() before acquiring reservations. Refactor test 1.2 to inject an HTTP POST request to /v1/agent/checkout and assert HTTP 403 rejection.",
+      "regression_test_required": "test_http_checkout_rejects_suspended_or_revoked_agent: Send HTTP POST to /v1/agent/checkout with an agent principal marked SUSPENDED and assert HTTP 403 rejection."
+    },
+    {
+      "id": "SEC-TRK4-003",
+      "severity": "MEDIUM",
+      "title": "Malformed Payment Rail Response Handling Accepts Null Order ID and Corrupts Session Reconciliation",
+      "phase": "Phase 16: Chaos & Failure Safety (Workstream N)",
+      "location": "src/gateway/router.ts:867-882, src/store/db.ts:82",
+      "observation": "In src/gateway/router.ts line 856, the gateway invokes railClient.createOrder(). If the payment rail returns a malformed response where id is null or undefined, the router does not validate that razorpayOrder.id is a non-empty string. It executes INSERT INTO order_sessions (...) VALUES (?, ?, ?, ...) with razorpay_order_id = null. In src/store/db.ts line 82, razorpay_order_id has a UNIQUE constraint but lacks NOT NULL. The gateway returns HTTP 201 Created with razorpay_order_id: null.",
+      "attack_reproduction": "1. Mock or intercept railClient.createOrder to return { id: null, entity: 'order', amount: 350000, status: 'created' }.\n2. Submit a valid checkout request to POST /v1/agent/checkout.\n3. Gateway commits order session to database with razorpay_order_id = null and returns HTTP 201 Created.\n4. When webhook arrives from payment rail referencing the real order ID, it cannot be matched to the session.",
+      "expected": "Fail-closed. The gateway must validate that the provider order response contains a non-empty string identifier. If missing, it must abort order session insertion, roll back dual reservations, log RAIL_RESPONSE_MALFORMED in audit ledger, and return HTTP 502 PAYMENT_RAIL_ERROR.",
+      "actual": "Gateway accepts malformed response with null order ID, retains dual-resource reservations, and returns HTTP 201 Created.",
+      "impact": "MEDIUM. Ghost orders, unreconcilable database state, and failure of subsequent webhook matching.",
+      "evidence": "Empirical chaos test CHAOS-08 in phase16_chaos_harness.ts confirmed: Status 201 returned with razorpay_order_id recorded as null.",
+      "recommendation": "1. In src/gateway/router.ts line 867, add: if (!razorpayOrder?.id || typeof razorpayOrder.id !== 'string') { throw new Error('Payment rail returned malformed response: missing order ID'); }.\n2. In src/store/db.ts line 82, alter schema: razorpay_order_id TEXT UNIQUE NOT NULL.",
+      "regression_test_required": "test_malformed_order_response_rolls_back_and_fails_closed: Mock railClient to return null ID, assert HTTP 502 response, and assert reservation is RELEASED."
+    },
+    {
+      "id": "SEC-TRK4-004",
+      "severity": "LOW",
+      "title": "Continuous Integration Workflow Omits Explicit Least-Privilege Permissions Block",
+      "phase": "Phase 22: Supply Chain Security (Workstream P)",
+      "location": ".github/workflows/ci.yml:1-41",
+      "observation": "In .github/workflows/ci.yml, the workflow defines the 'verify' job running build, test, pentest, audit:verify, and benchmark steps. However, it completely omits a top-level or job-level 'permissions:' directive. By default in GitHub Actions, workflows without explicit permissions inherit repository-default write permissions for GITHUB_TOKEN, creating supply chain escalation risks if dependencies or build scripts are compromised.",
+      "attack_reproduction": "Inspect .github/workflows/ci.yml lines 9-14: Job 'verify' specifies 'runs-on: ubuntu-latest' and proceeds directly to 'steps:' without declaring permissions.",
+      "expected": "Workflows must adhere to OpenSSF / SLSA least privilege standards by declaring top-level: permissions: contents: read.",
+      "actual": "Permissions directive is omitted, relying on implicit GitHub repository defaults.",
+      "impact": "LOW. Security posture weakness and violation of GitHub Actions supply chain best practices.",
+      "evidence": "Source review of .github/workflows/ci.yml lines 1-15.",
+      "recommendation": "Add explicit top-level permissions block to .github/workflows/ci.yml:\npermissions:\n  contents: read",
+      "regression_test_required": "Workflow schema validation checking for explicit permissions block in all .github/workflows/*.yml files."
+    },
+    {
+      "id": "SEC-TRK4-005",
+      "severity": "INFORMATIONAL",
+      "title": "Performance Benchmark Baseline 303.81 ms Evaluates Single-Iteration Cold Boot with In-Memory Mock Rather than Live End-to-End Latency",
+      "phase": "Phase 18: Performance Verification (Workstream O)",
+      "location": "src/demo/benchmark.ts:1-94, AGENTS.md:23",
+      "observation": "The canonical repository benchmark metric (303.81 ms baseline; empirically reproduced at 301.98 ms and 282.96 ms) measures a single cold-start iteration using Fastify in-memory injection (app.inject), an in-memory SQLite database (:memory:), and an offline deterministic mock Razorpay order generator (isLiveCredentials == false). Framework boot and plugin initialization account for ~237 - 250 ms (~83%) of the duration, while the actual checkout transaction takes 41 - 47 ms cold and 3 - 10 ms warm. Crucially, it does not include OS TCP/TLS network stack overhead or external HTTP roundtrips to Razorpay sandbox endpoints (which typically add 200 - 500 ms).",
+      "attack_reproduction": "Run npm run benchmark. Milestones printed: 1. Gateway Boot & Policy Engine: 250.56 ms; 2. Catalog Ingestion: 0.55 ms; 3. Ed25519 Mandate Sign: 3.44 ms; 4. 6-Phase Agent Checkout: 47.42 ms; Total: 301.98 ms.",
+      "expected": "Performance documentation should explicitly distinguish framework cold-start boot latency from warm transaction processing latency, and state that external bank rail network latency is excluded.",
+      "actual": "Documentation presents 303.81 ms as a single monolithic metric without qualifying that 83% of the time is Node.js/Fastify cold-start initialization.",
+      "impact": "INFORMATIONAL. Potential misinterpretation of architectural throughput and latency characteristics.",
+      "evidence": "Source review of src/demo/benchmark.ts lines 17, 28, 64 and empirical benchmark stdout.",
+      "recommendation": "Publish separate metrics: (1) Cold-Start Initialization: ~250 ms, (2) Core Authorization Engine Latency (p50: ~4 ms, p95: ~8 ms, p99: ~15 ms), and (3) Projected Live Network Transaction Latency (~300 - 550 ms).",
+      "regression_test_required": "None (Documentation clarification)."
+    },
+    {
+      "id": "SEC-TRK4-006",
+      "severity": "INFORMATIONAL",
+      "title": "Documentation Metric Drift: Documented 77/77 Test Count Stale by 25 Tests Due to Uncommitted Control Plane Suites",
+      "phase": "Phase 20: Claim & Evidence Audit (Workstream P)",
+      "location": "AGENTS.md:24, README.md, docs/RELEASE_NOTES.md",
+      "observation": "Repository documentation, including AGENTS.md and README.md, documents 'Automated Tests: 77 / 77 Passing'. Active execution of npm test executes 102 tests across 12 test files with 100% pass rate in 3.72s. The test suite expanded by 25 tests due to the introduction of V2 control plane, V3 security infra, and V4 universal plane test suites in src/core/__tests__/.",
+      "attack_reproduction": "Run npm test. Vitest reports: 'Test Files: 12 passed (12), Tests: 102 passed (102)'. Compare with AGENTS.md line 24.",
+      "expected": "Documentation claims should accurately reflect current test suite counts.",
+      "actual": "Documentation cites 77 tests; active runner executes 102 tests.",
+      "impact": "INFORMATIONAL. Documentation discrepancy.",
+      "evidence": "vitest output: 102 passed (102).",
+      "recommendation": "Update AGENTS.md, README.md, and test matrices to document 102 / 102 passing tests.",
+      "regression_test_required": "None."
+    },
+    {
+      "id": "SEC-TRK4-007",
+      "severity": "INFORMATIONAL",
+      "title": "External Tool Disclosure: Assessment Utilized Strix-Informed Methodology Without Independent Strix Binary Execution",
+      "phase": "Phase 21: External Tool / Strix Disclosure (Workstream P)",
+      "location": "reports/pentest/PENTEST_REPORT.md:60, reports/pentest/SECURITY_CONTROL_MATRIX.md:3",
+      "observation": "The penetration test reports and security control matrices cite Strix priorities across 14 security invariants. In-depth inspection confirms that no Strix binary, CLI agent, or automated scanning tool was executed against the repository. The pentest suite was implemented and executed entirely through custom TypeScript code in src/demo/pentest_runner.ts.",
+      "attack_reproduction": "Search repository for Strix executable, CLI invocation, or scan artifact outputs. None exist.",
+      "expected": "External tool citations must strictly adhere to Phase 21 labeling: STRIX-INFORMED METHODOLOGY vs INDEPENDENT STRIX SCAN.",
+      "actual": "Footnotes in PENTEST_REPORT.md correctly mention methodology-informed assessment, but summary tables and headers must maintain consistent labeling to avoid auditor ambiguity.",
+      "impact": "INFORMATIONAL. Transparency and attribution accuracy.",
+      "evidence": "PENTEST_REPORT.md:60: '(methodology-driven assessment; external binary agent not independently executed)'.",
+      "recommendation": "Enforce standardized label across all audit documentation: 'STRIX-INFORMED METHODOLOGY (Independent external scanner binary was not executed)'.",
+      "regression_test_required": "None."
+    }
+  ],
+  "claims_taxonomy_audit": [
+    {
+      "claim": "77 / 77 Automated Tests Passing",
+      "taxonomy_class": "TESTED / OBSERVED",
+      "empirical_status": "SUPERSEDED (102 / 102 passing tests active in vitest run)",
+      "evidence": "vitest run output: 12 test files passed, 102 passed (102), duration 3.72s",
+      "notes": "Documentation claim is stale; actual suite contains 102 genuine passing tests."
+    },
+    {
+      "claim": "19 / 19 Live Penetration Scenarios Blocked / Passing",
+      "taxonomy_class": "VERIFIED",
+      "empirical_status": "CONFIRMED (19 / 19 passed in npm run pentest)",
+      "evidence": "reports/pentest/raw_results.json and live execution of src/demo/pentest_runner.ts",
+      "notes": "Exercises adversarial scenarios: mandate tampering, race conditions, replay, SQLi, HMAC bypass, and tamper detection."
+    },
+    {
+      "claim": "307 Blocks Cryptographically Chained in Tamper-Evident Audit Ledger",
+      "taxonomy_class": "VERIFIED",
+      "empirical_status": "CONFIRMED (307 blocks verified across 3 SQLite ledgers)",
+      "evidence": "scripts/verify_audit.ts stdout: acg_gateway.db (183), demo_simulation.db (28), live_pentest.db (96)",
+      "notes": "Every block verified with SHA-256 forward-chaining and genesis hash consistency."
+    },
+    {
+      "claim": "303.81 ms Canonical Cold-Start Benchmark Baseline",
+      "taxonomy_class": "OBSERVED / TESTED",
+      "empirical_status": "CONFIRMED AS COLD IN-MEMORY BENCHMARK (Measured at 301.98 ms and 282.96 ms)",
+      "evidence": "src/demo/benchmark.ts execution output",
+      "notes": "Evaluates in-memory Fastify injection against :memory: SQLite and offline mock order generator. 83% of time is framework boot."
+    },
+    {
+      "claim": "Razorpay Sandbox Integration",
+      "taxonomy_class": "TESTED (Mock) / ADAPTER READY (Live)",
+      "empirical_status": "CONFIRMED (Mock active by default; Live HTTP adapter implemented in RazorpayRailClient)",
+      "evidence": "src/rails/razorpay.ts lines 40-70",
+      "notes": "Live network calls require valid rzp_test_* credentials; placeholder keys route to deterministic offline mock generators."
+    },
+    {
+      "claim": "Model Context Protocol (MCP) Adapter",
+      "taxonomy_class": "ADAPTER READY",
+      "empirical_status": "CONFIRMED (Adapter normalization implemented and tested in protocol_adapters.test.ts)",
+      "evidence": "src/core/mcp_surface.ts, src/core/__tests__/protocol_adapters.test.ts",
+      "notes": "Normalizes MCP tool call requests into CanonicalIntent and routes through central authorization engine."
+    },
+    {
+      "claim": "Agent-to-Agent (A2A) Protocol Adapter",
+      "taxonomy_class": "ADAPTER READY",
+      "empirical_status": "CONFIRMED (Adapter normalization implemented and tested in protocol_adapters.test.ts)",
+      "evidence": "src/adapters/registry.ts, src/core/__tests__/protocol_adapters.test.ts",
+      "notes": "Normalizes A2A messages into CanonicalIntent; zero bypass of authorization engine."
+    },
+    {
+      "claim": "Agent Commerce Protocol (ACP) Adapter",
+      "taxonomy_class": "ADAPTER READY",
+      "empirical_status": "CONFIRMED (Adapter normalization implemented and tested)",
+      "evidence": "src/adapters/registry.ts, src/core/__tests__/protocol_adapters.test.ts",
+      "notes": "Normalizes ACP payload into CanonicalIntent; routes through central gateway."
+    },
+    {
+      "claim": "Autonomous Payment Protocol v2 (AP2) Adapter",
+      "taxonomy_class": "ADAPTER READY",
+      "empirical_status": "CONFIRMED (Adapter normalization implemented and tested)",
+      "evidence": "src/adapters/registry.ts, src/core/__tests__/protocol_adapters.test.ts",
+      "notes": "Normalizes AP2 checkout payloads into CanonicalIntent; routes through central gateway."
+    },
+    {
+      "claim": "Universal Commerce Protocol (UCP) Adapter",
+      "taxonomy_class": "ADAPTER READY",
+      "empirical_status": "CONFIRMED (Adapter normalization implemented and tested)",
+      "evidence": "src/adapters/registry.ts, src/core/__tests__/protocol_adapters.test.ts",
+      "notes": "Normalizes multi-merchant cart structures into CanonicalIntent; routes through central gateway."
+    },
+    {
+      "claim": "Transaction Authorization Protocol (TAP) Adapter",
+      "taxonomy_class": "DESIGNED",
+      "empirical_status": "DESIGN SPECIFICATION (Abstract schema registered in registry)",
+      "evidence": "src/adapters/registry.ts lines 15-40",
+      "notes": "Specification and normalization stub present; deferred to central gateway execution."
+    },
+    {
+      "claim": "Razorpay Vulcan AI Foundation Model (Downstream Payment Intelligence)",
+      "taxonomy_class": "DESIGNED / ADAPTER READY",
+      "empirical_status": "CONFIRMED (Advisory telemetry mock adapter; no public inference API exists)",
+      "evidence": "src/rails/intelligence.ts lines 1-64",
+      "notes": "Explicitly disclaimed in code: 'Architecture-ready downstream advisory telemetry. No public developer inference API exists for Vulcan. ACG enforces binding merchant authorization.' Evaluated in router but does not authorize."
+    },
+    {
+      "claim": "Production Readiness / Enterprise Multi-Node Deployment",
+      "taxonomy_class": "PRODUCTION TARGET / DESIGNED",
+      "empirical_status": "TARGET ARCHITECTURE (Single-node SQLite currently active)",
+      "evidence": "src/store/postgres_schema.sql, src/store/db.ts:1-251, .github/workflows/ci.yml",
+      "notes": "Runtime currently uses single-process synchronous node:sqlite (DatabaseSync). Horizontal clustering requires migration to PostgreSQL with row-level locks, Redis distributed locks, and HSM secret management."
+    }
+  ]
+}

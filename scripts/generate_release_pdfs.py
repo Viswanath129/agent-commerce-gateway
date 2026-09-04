@@ -379,6 +379,10 @@ def main():
         ("docs/12_DEMO_RUNBOOK.md", "reports/pdf/ACG_DEMO_RUNBOOK.pdf", "Live Demo Runbook"),
         ("docs/13_EVALUATOR_ONE_PAGE.md", "reports/pdf/ACG_EVALUATOR_ONE_PAGE.pdf", "Evaluator One-Page Summary"),
         ("docs/14_FINAL_RELEASE_SIGNOFF.md", "reports/pdf/ACG_FINAL_RELEASE_SIGNOFF.pdf", "Final Release Verification Sign-Off"),
+        ("docs/evolution/V2.md", "reports/pdf/ACG_V2_CONTROL_PLANE.pdf", "ACG V2 Agent Financial Control Plane"),
+        ("docs/evolution/V3.md", "reports/pdf/ACG_V3_SECURITY_INFRASTRUCTURE.pdf", "ACG V3 Agent Security Infrastructure"),
+        ("docs/evolution/V4.md", "reports/pdf/ACG_V4_UNIVERSAL_CONTROL_PLANE.pdf", "ACG V4 Universal Agent Control Plane"),
+        ("docs/evolution/FINAL_EVOLUTION_REPORT.md", "reports/pdf/ACG_FINAL_EVOLUTION_REPORT.pdf", "ACG Final Evolution Report"),
     ]
 
     for md_path, pdf_path, header in individual_mappings:
@@ -398,6 +402,11 @@ def main():
         ("docs/10_ADVERSARIAL_TESTING.md", "Adversarial Testing"),
         ("docs/11_PRODUCTION_GAP_ANALYSIS.md", "Production Gap Analysis"),
         ("docs/12_DEMO_RUNBOOK.md", "Demo Runbook"),
+        ("docs/evolution/V2.md", "V2 Control Plane"),
+        ("docs/evolution/V3.md", "V3 Security Infrastructure"),
+        ("docs/evolution/V4.md", "V4 Universal Control Plane"),
+        ("docs/evolution/EVOLUTION_SCORECARD.md", "Evolution Scorecard"),
+        ("docs/evolution/FINAL_EVOLUTION_REPORT.md", "Final Evolution Report"),
         ("docs/14_FINAL_RELEASE_SIGNOFF.md", "Final Release Signoff"),
     ]
 

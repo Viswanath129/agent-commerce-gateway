@@ -40,19 +40,37 @@ export class RazorpayWebhookProcessor {
 
   /**
    * Verifies Razorpay HMAC SHA256 Webhook Signature.
+   * Compares against raw wire bytes first, with fallback to canonical JSON representation.
    */
-  public verifySignature(rawBody: string, signature: string): boolean {
+  public verifySignature(rawBody: string | any, signature: string): boolean {
     if (!signature) return false;
+    const bodyStr = typeof rawBody === "string" ? rawBody : JSON.stringify(rawBody);
     const expectedSignature = crypto
       .createHmac("sha256", this.webhookSecret)
-      .update(rawBody)
+      .update(bodyStr)
       .digest("hex");
     const expectedBuf = Buffer.from(expectedSignature, "utf-8");
     const actualBuf = Buffer.from(signature, "utf-8");
-    if (expectedBuf.length !== actualBuf.length) {
-      return false;
+    
+    if (expectedBuf.length === actualBuf.length && crypto.timingSafeEqual(expectedBuf, actualBuf)) {
+      return true;
     }
-    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+
+    // If rawBody was parsed or reformatted, check normalized JSON serialization
+    try {
+      const parsed = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
+      const normalizedStr = JSON.stringify(parsed);
+      const altSignature = crypto
+        .createHmac("sha256", this.webhookSecret)
+        .update(normalizedStr)
+        .digest("hex");
+      const altBuf = Buffer.from(altSignature, "utf-8");
+      if (altBuf.length === actualBuf.length && crypto.timingSafeEqual(altBuf, actualBuf)) {
+        return true;
+      }
+    } catch {}
+
+    return false;
   }
 
   /**
@@ -102,8 +120,95 @@ export class RazorpayWebhookProcessor {
 
     const intentId = orderSession.intent_id;
 
-    // 3. Monotonic State Handling
-    if (eventPayload.event === "payment.authorized") {
+    // 3. Strict State Machine Validation: Prevent illegal transitions from terminal or failed states
+    if (eventPayload.event === "payment.captured") {
+      if (
+        orderSession.status !== "ORDER_CREATED" &&
+        orderSession.status !== "PAYMENT_AUTHORIZED" &&
+        orderSession.status !== "PAYMENT_ATTEMPTED"
+      ) {
+        if (orderSession.status === "PAYMENT_CAPTURED") {
+          return { status: "DUPLICATE_IGNORED", message: "Order is already in PAYMENT_CAPTURED state" };
+        }
+        this.audit.logTransition(
+          intentId,
+          "ILLEGAL_STATE_TRANSITION_BLOCKED",
+          orderSession.status,
+          orderSession.status,
+          {
+            eventId,
+            orderId,
+            paymentId,
+            attemptedEvent: eventPayload.event,
+            reason: `Illegal state transition from state '${orderSession.status}' to 'PAYMENT_CAPTURED'`,
+          }
+        );
+        return {
+          status: "ERROR",
+          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_CAPTURED'`,
+        };
+      }
+
+      // Invariant: Verify underlying reservation is still HELD and commit it
+      const committed = this.reservationEngine.commitReservation(orderSession.reservation_id);
+      if (!committed) {
+        this.audit.logTransition(
+          intentId,
+          "RESERVATION_COMMIT_FAILED",
+          orderSession.status,
+          orderSession.status,
+          {
+            reservationId: orderSession.reservation_id,
+            reason: `Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
+          }
+        );
+        return {
+          status: "ERROR",
+          message: `Cannot capture payment: Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
+        };
+      }
+
+      // Valid transition from ORDER_CREATED or PAYMENT_AUTHORIZED with committed reservation
+      this.db
+        .prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
+        .run(paymentId || null, Date.now(), intentId);
+
+      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
+        eventId,
+        orderId,
+        paymentId,
+      });
+
+      await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
+    } else if (eventPayload.event === "payment.authorized") {
+      if (
+        orderSession.status === "PAYMENT_FAILED" ||
+        orderSession.status === "DUAL_RESERVATION_RELEASED" ||
+        orderSession.status === "REFUNDED"
+      ) {
+        this.audit.logTransition(
+          intentId,
+          "ILLEGAL_STATE_TRANSITION_BLOCKED",
+          orderSession.status,
+          orderSession.status,
+          {
+            eventId,
+            orderId,
+            paymentId,
+            attemptedEvent: eventPayload.event,
+            reason: `Illegal state transition from terminal state '${orderSession.status}' to 'PAYMENT_AUTHORIZED'`,
+          }
+        );
+        return {
+          status: "ERROR",
+          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_AUTHORIZED'`,
+        };
+      }
+
+      if (orderSession.status === "PAYMENT_AUTHORIZED" || orderSession.status === "PAYMENT_CAPTURED") {
+        return { status: "DUPLICATE_IGNORED", message: `Order is already ${orderSession.status}` };
+      }
+
       this.db
         .prepare("UPDATE order_sessions SET status = 'PAYMENT_AUTHORIZED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
         .run(paymentId || null, Date.now(), intentId);
@@ -113,21 +218,31 @@ export class RazorpayWebhookProcessor {
         orderId,
         paymentId,
       });
-    } else if (eventPayload.event === "payment.captured") {
-      this.db
-        .prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
-        .run(paymentId || null, Date.now(), intentId);
-
-      this.reservationEngine.commitReservation(orderSession.reservation_id);
-
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
-        eventId,
-        orderId,
-        paymentId,
-      });
-
-      await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
     } else if (eventPayload.event === "payment.failed") {
+      if (orderSession.status === "PAYMENT_CAPTURED" || orderSession.status === "REFUNDED") {
+        this.audit.logTransition(
+          intentId,
+          "ILLEGAL_STATE_TRANSITION_BLOCKED",
+          orderSession.status,
+          orderSession.status,
+          {
+            eventId,
+            orderId,
+            paymentId,
+            attemptedEvent: eventPayload.event,
+            reason: `Cannot fail payment when order session is already '${orderSession.status}'`,
+          }
+        );
+        return {
+          status: "ERROR",
+          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_FAILED'`,
+        };
+      }
+
+      if (orderSession.status === "PAYMENT_FAILED") {
+        return { status: "DUPLICATE_IGNORED", message: "Order is already PAYMENT_FAILED" };
+      }
+
       this.db
         .prepare("UPDATE order_sessions SET status = 'PAYMENT_FAILED', updated_at = ? WHERE intent_id = ?")
         .run(Date.now(), intentId);

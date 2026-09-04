@@ -1,0 +1,207 @@
+{
+  "track": "Track 3: Rails, Protocols & Storage (Workstreams F through M / Phases 8 through 15)",
+  "auditor": "worker_rails_protocols_1",
+  "timestamp": "2026-09-04T03:45:00Z",
+  "repository": "B:\\projects\\RAZOR PAY- Buildathon",
+  "commit": "23ba7772a3bf69303930af93486970131326fd4c",
+  "summary": {
+    "total_findings": 9,
+    "critical": 2,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+    "informational": 1
+  },
+  "workstreams": {
+    "workstream_f_phase_8": {
+      "name": "Payment State Machine",
+      "status": "ANALYZED & VERIFIED WITH OBSERVATIONS",
+      "states_count": 15,
+      "legal_transitions_enumerated": true,
+      "state_machine_isolated_tests": "PASS",
+      "runtime_integration_gap": "DETECTED"
+    },
+    "workstream_g_phase_9": {
+      "name": "Webhook Security",
+      "status": "VULNERABILITIES CONFIRMED",
+      "hmac_constant_time": "VERIFIED (crypto.timingSafeEqual)",
+      "deduplication_active": "VERIFIED (processed_webhook_events)",
+      "test_bypass_header": "CONFIRMED CRITICAL (router.ts:1174)",
+      "payload_reserialization_risk": "CONFIRMED HIGH (router.ts:1169)"
+    },
+    "workstream_h_phase_10": {
+      "name": "API Security & RBAC",
+      "status": "VULNERABILITIES CONFIRMED",
+      "rbac_scope_enforcement": "VERIFIED ON PROTECTED ROUTES",
+      "static_token_storage": "CONFIRMED HIGH (auth.ts:5-9)",
+      "unauthenticated_reservation_route": "CONFIRMED CRITICAL (router.ts:1684)"
+    },
+    "workstream_i_phase_11": {
+      "name": "Protocol Adapter Security",
+      "status": "VERIFIED",
+      "adapters": [
+        { "protocol": "ACG", "status": "LIVE", "bypass_possible": false },
+        { "protocol": "MCP", "status": "ADAPTER READY", "bypass_possible": false },
+        { "protocol": "A2A", "status": "ADAPTER READY", "bypass_possible": false },
+        { "protocol": "ACP", "status": "ADAPTER READY", "bypass_possible": false },
+        { "protocol": "AP2", "status": "ADAPTER READY", "bypass_possible": false },
+        { "protocol": "UCP", "status": "ADAPTER READY", "bypass_possible": false },
+        { "protocol": "TAP", "status": "DESIGN", "bypass_possible": false }
+      ],
+      "central_authorization_invariant": "INTACT (Zero adapter bypasses 6-phase pipeline)"
+    },
+    "workstream_j_phase_12": {
+      "name": "Razorpay Integration Truth",
+      "status": "VERIFIED",
+      "environment": "Deterministic Mock Sandbox by Default (isLiveCredentials == false)",
+      "receipt_idempotency": "VERIFIED (receipt = intent_id)",
+      "pre_capture_refund_block": "VERIFIED"
+    },
+    "workstream_k_phase_13": {
+      "name": "Database / ACID Concurrency",
+      "status": "VERIFIED SINGLE-NODE ACID / PRODUCTION DISTRIBUTED BOUND",
+      "single_node_acid": "VERIFIED (BEGIN IMMEDIATE TRANSACTION with foreign keys)",
+      "distributed_consistency": "NOT SUPPORTED / PRODUCTION TARGET"
+    },
+    "workstream_l_phase_14": {
+      "name": "Audit Ledger Integrity",
+      "status": "VERIFIED TAMPER-EVIDENT SHA-256 HASH CHAIN",
+      "hash_chain_verified_blocks": 307,
+      "tamper_detection_active": "VERIFIED (detects detail edit, prev_hash edit, block deletion)"
+    },
+    "workstream_m_phase_15": {
+      "name": "Frontend Security & Metrics",
+      "status": "VERIFIED WITH METRIC RECLASSIFICATION",
+      "direct_api_bypass": "CONFIRMED (via unauthenticated routes)",
+      "hardcoded_metrics": ["measured_cold_run_ms: 286.3", "is_sandbox_connected: true", "gateway.latency_ms: 12", "razorpay_rails.mode: Sandbox"]
+    }
+  },
+  "findings": [
+    {
+      "id": "TRK3-WH-01",
+      "severity": "CRITICAL",
+      "title": "Hardcoded Test Signature Bypass in Razorpay Webhook Ingress",
+      "location": "src/gateway/router.ts:1174",
+      "observation": "router.ts:1174 contains the conditional check: 'if (signature !== \"mock_signature\" && !webhookProcessor.verifySignature(rawBody, signature))'. Supplying the exact string 'mock_signature' in the 'x-razorpay-signature' header bypasses HMAC SHA-256 verification unconditionally.",
+      "attack_reproduction": "Send an HTTP POST to /webhooks/razorpay with header 'x-razorpay-signature: mock_signature' and payload '{ \"event\": \"payment.captured\", \"payload\": { \"order\": { \"entity\": { \"id\": \"<target_order_id>\" } } } }'. The request is accepted with HTTP 200 without cryptographic verification.",
+      "expected": "HMAC SHA-256 signature verification must be enforced unconditionally on every incoming webhook payload.",
+      "actual": "Header 'x-razorpay-signature: mock_signature' bypasses cryptographic signature verification completely.",
+      "impact": "Remote unauthorized financial settlement manipulation: An external attacker can fake payment captures, commit reservations, and trigger fulfillment dispatches without paying.",
+      "evidence": "Source inspection of src/gateway/router.ts:1174 and live pentest execution confirmation.",
+      "recommendation": "Remove 'signature !== \"mock_signature\"' from production routing code. In automated tests, generate valid HMAC SHA-256 signatures using the test webhook secret instead of bypassing verification.",
+      "regression_test_required": "Assert that 'POST /webhooks/razorpay' with 'x-razorpay-signature: mock_signature' returns HTTP 401 INVALID_WEBHOOK_SIGNATURE."
+    },
+    {
+      "id": "TRK3-RBAC-01",
+      "severity": "CRITICAL",
+      "title": "Unauthenticated Direct Dual-Resource Reservation Creation via POST /v1/reservations",
+      "location": "src/gateway/router.ts:1684-1701",
+      "observation": "Route POST /v1/reservations exposes direct access to reservationEngine.holdReservation() without any Fastify preHandler scope check (requireScope) and without evaluating Ed25519 mandate signatures, revocation status, or merchant policy.",
+      "attack_reproduction": "Issue an anonymous HTTP POST to /v1/reservations with body: { intent_id: '<uuid>', mandate: { mandate_id: 'forged_mandate', budget_limit: 1000000 }, items: [{ sku: 'SKU-KEYBOARD-RGB', quantity: 5 }] }. The server responds HTTP 201 Created and decrements real merchant catalog stock.",
+      "expected": "Direct reservation endpoints must require administrative authorization (merchant:policy:write) or enforce full 6-phase mandate signature verification.",
+      "actual": "Locks real catalog inventory units anonymously without authentication or signature verification.",
+      "impact": "Denial of Inventory / Resource Exhaustion: An unauthenticated malicious actor can lock up all merchant inventory in 'HELD' reservations anonymously, causing denial of service to legitimate buyers.",
+      "evidence": "Source code in router.ts:1684-1701 and verified absence of requireScope preHandler.",
+      "recommendation": "Add '{ preHandler: [requireScope(\"merchant:policy:write\")] }' or remove the public route if not required for external control plane integration.",
+      "regression_test_required": "Assert that unauthenticated POST /v1/reservations returns HTTP 401 UNAUTHORIZED."
+    },
+    {
+      "id": "TRK3-SM-01",
+      "severity": "HIGH",
+      "title": "Runtime Bypass of Formal Payment State Machine in Webhook Handler",
+      "location": "src/gateway/router.ts:19 and src/rails/webhook.ts:107-142",
+      "observation": "FinancialStateMachine is defined in src/core/state_machine.ts and imported in src/gateway/router.ts:19, but FinancialStateMachine.validateTransition() is NEVER invoked in router.ts or webhook.ts before mutating order_sessions.status.",
+      "attack_reproduction": "Submit a payment.captured webhook with a new event ID for an order session that is currently in 'REFUNDED' or 'PAYMENT_FAILED'. webhook.ts:117 blindly executes UPDATE order_sessions SET status = 'PAYMENT_CAPTURED' and calls triggerFulfillment() regardless of previous status.",
+      "expected": "Every state mutation must invoke FinancialStateMachine.validateTransition(currentStatus, targetStatus) and reject illegal transitions (e.g. REFUNDED -> CAPTURED, PAYMENT_FAILED -> CAPTURED).",
+      "actual": "State is overwritten via raw SQL UPDATE statement without validating against the formal transition map.",
+      "impact": "Out-of-order or duplicate webhook events can resurrect terminated or refunded orders, causing double fulfillment or inconsistent financial states.",
+      "evidence": "Grep search confirming FinancialStateMachine.validateTransition is only called in unit tests, not in runtime order update paths.",
+      "recommendation": "Integrate FinancialStateMachine.validateTransition(orderSession.status, 'CAPTURED') inside RazorpayWebhookProcessor.processEvent before executing SQL updates.",
+      "regression_test_required": "Send payment.captured webhook for an order with status 'REFUNDED'; assert transition is rejected as illegal financial state transition."
+    },
+    {
+      "id": "TRK3-WH-02",
+      "severity": "HIGH",
+      "title": "HMAC Verification Computed over Re-Serialized JSON Body Instead of Raw Buffer",
+      "location": "src/gateway/router.ts:1169 and src/rails/webhook.ts:44-56",
+      "observation": "router.ts:1169 executes 'const rawBody = JSON.stringify(request.body);' and passes rawBody to verifySignature. Fastify parses the request stream into an object first; re-stringification does not guarantee identical whitespace, key ordering, or byte representation as Razorpay's wire transmission.",
+      "attack_reproduction": "Send a valid Razorpay webhook with spaces or non-standard key ordering. The HMAC computed over JSON.stringify(request.body) differs from the signature generated by Razorpay over original wire bytes.",
+      "expected": "Webhook HMAC signature must be verified against the exact, unparsed incoming raw byte Buffer.",
+      "actual": "Verification uses re-serialized JSON string from parsed object.",
+      "impact": "Production integration instability: Legitimate payment notifications from Razorpay may fail verification and be rejected with 401 INVALID_WEBHOOK_SIGNATURE, leaving orders uncaptured.",
+      "evidence": "Source code in router.ts:1169 ('const rawBody = JSON.stringify(request.body);').",
+      "recommendation": "Enable Fastify raw body preservation (e.g. fastify-raw-body plugin) and pass request.rawBody Buffer directly to crypto.createHmac().",
+      "regression_test_required": "Verify webhook signature verification passes when payload contains non-standard JSON formatting (extra spaces, newlines)."
+    },
+    {
+      "id": "TRK3-RBAC-02",
+      "severity": "HIGH",
+      "title": "Static Plaintext Administrative Bearer Tokens Embedded in Source Code",
+      "location": "src/gateway/auth.ts:5-9",
+      "observation": "Static administrative bearer tokens ('secret_merchant_admin', 'secret_merchant_viewer', 'secret_audit_bot') are defined in a hardcoded dictionary in source code.",
+      "attack_reproduction": "Inspect src/gateway/auth.ts, extract 'secret_merchant_admin', and pass 'Authorization: Bearer secret_merchant_admin' to PUT /v1/merchant/policy or POST /v1/mandates/revoke.",
+      "expected": "Administrative credentials must be loaded from secure environment variables or verified via asymmetric signed JWTs with short expirations.",
+      "actual": "Hardcoded plaintext credentials in source code provide permanent full administrative privileges.",
+      "impact": "Credential exposure: Anyone with read access to the repository or Docker image has administrative control over merchant policies, mandate revocations, and audit logs.",
+      "evidence": "Source code in src/gateway/auth.ts:5-9.",
+      "recommendation": "Migrate administrative authentication to environment-configured API keys (e.g. process.env.ACG_ADMIN_TOKEN) or asymmetric JWTs.",
+      "regression_test_required": "Ensure hardcoded fallback tokens are strictly rejected in production mode."
+    },
+    {
+      "id": "TRK3-FE-01",
+      "severity": "MEDIUM",
+      "title": "Hardcoded Latency and Status Telemetry in Gateway API Responses",
+      "location": "src/gateway/router.ts:177-178, 266, 270, 273",
+      "observation": "Endpoints /dashboard/metrics and /dashboard/health return static literal values for several performance and status indicators: measured_cold_run_ms: 286.3, is_sandbox_connected: true, latency_ms: 12, mode: 'Sandbox', and payment_intelligence.model: 'vulcan-v1.4-live-transformer'.",
+      "attack_reproduction": "Query GET /dashboard/metrics and GET /dashboard/health. The latency is always exactly 286.3 ms and 12 ms, regardless of actual execution duration or system load.",
+      "expected": "Operational dashboards must display real-time measured latencies computed from recent execution traces (e.g. rolling p50/p95 from decision_traces).",
+      "actual": "Hardcoded static literals are presented as live telemetry.",
+      "impact": "Misleading operational observability: Operators cannot detect latency degradation or disconnection from health endpoints.",
+      "evidence": "Source inspection of src/gateway/router.ts:177, 178, 266, 270, 273.",
+      "recommendation": "Compute rolling latency metrics from the decision_traces SQLite table and actively probe Razorpay sandbox connectivity.",
+      "regression_test_required": "Assert that /dashboard/metrics measured latency fluctuates based on actual execution durations."
+    },
+    {
+      "id": "TRK3-ACID-01",
+      "severity": "MEDIUM",
+      "title": "Single-Node SQLite Serialized ACID Guarantee Does Not Scale Across Distributed Instances",
+      "location": "src/core/reservation.ts:72 and src/store/db.ts:15-18",
+      "observation": "Dual-resource locking relies on SQLite's 'BEGIN IMMEDIATE TRANSACTION;' via synchronous node:sqlite DatabaseSync. Concurrency control uses local file-locking semantics.",
+      "attack_reproduction": "Deploy ACG gateway across multiple container instances or worker processes sharing a network disk (NFS/CIFS). Concurrent writes from multiple processes will cause SQLITE_BUSY locking errors or inconsistent lock acquisition.",
+      "expected": "Distributed deployments require centralized locking (e.g. Redis Redlock) or an enterprise RDBMS with serialized row-level locking (PostgreSQL SELECT ... FOR UPDATE).",
+      "actual": "Single-node synchronous SQLite lock.",
+      "impact": "Architecture limitation: ACG is strictly limited to single-process deployments. Attempting multi-instance horizontal scaling without migrating to PostgreSQL risks database lock starvation or concurrency failures.",
+      "evidence": "Source code in src/core/reservation.ts:72 ('BEGIN IMMEDIATE TRANSACTION;').",
+      "recommendation": "Document single-node deployment boundary prominently and wire src/store/postgres_schema.sql with pg connection pooling for cluster deployments.",
+      "regression_test_required": "Multi-process concurrency test demonstrating SQLITE_BUSY contention under distributed load."
+    },
+    {
+      "id": "TRK3-WH-03",
+      "severity": "LOW",
+      "title": "Auto-Generated Event ID on Missing Header Bypasses Deduplication",
+      "location": "src/gateway/router.ts:1171",
+      "observation": "If the incoming webhook omits 'x-razorpay-event-id', router.ts:1171 defaults eventId to 'event_${Date.now()}'.",
+      "attack_reproduction": "Submit the same webhook payload repeatedly without the 'x-razorpay-event-id' header. Each submission receives a new eventId timestamp, completely bypassing processed_webhook_events deduplication.",
+      "expected": "Missing 'x-razorpay-event-id' should either reject with HTTP 400 Bad Request or derive a deterministic eventId from sha256(rawBody).",
+      "actual": "Non-deterministic event ID generation on missing header.",
+      "impact": "Replay attacks: Missing header allows identical payloads to be processed repeatedly if signature check is satisfied.",
+      "evidence": "Source code in src/gateway/router.ts:1171 ('const eventId = (request.headers[\"x-razorpay-event-id\"] as string) || `event_${Date.now()}`;').",
+      "recommendation": "Require 'x-razorpay-event-id' header or derive eventId deterministically via sha256(rawBody).",
+      "regression_test_required": "Assert that webhook POST without x-razorpay-event-id is rejected or deduplicated deterministically."
+    },
+    {
+      "id": "TRK3-AUD-01",
+      "severity": "INFORMATIONAL",
+      "title": "Audit Ledger Cryptographic Forward-Chain Integrity Verified (Tamper-Evident SHA-256)",
+      "location": "src/store/audit.ts:23-55, 69-111 and scripts/verify_audit.ts",
+      "observation": "Audit records are forward-chained via SHA-256: sha256(auditId|intentId|timestamp|eventType|prevState|newState|detailsJson|prevHash). verifyLedgerIntegrity() validates 307 blocks across ./data/acg_gateway.db (183), ./data/demo_simulation.db (28), and ./data/live_pentest.db (96). Any post-hoc mutation of details, event_type, or hashes is immediately detected.",
+      "attack_reproduction": "Modify any row in audit_ledger (e.g. UPDATE audit_ledger SET details_json = '{\"tampered\":true}' WHERE rowid = 2). Running npm run audit:verify immediately terminates with 'Tampered hash at block <audit_id>'.",
+      "expected": "Immediate detection of any post-hoc state mutation.",
+      "actual": "Verified tamper-evidence across all 307 historical ledger blocks.",
+      "impact": "Cryptographic assurance: ACG's audit chain is demonstrably tamper-evident within the storage layer.",
+      "evidence": "Verification output from scripts/verify_audit.ts and pentest runner test AUDIT-02.",
+      "recommendation": "Retain term 'TAMPER-EVIDENT SHA-256 HASH CHAIN'. Avoid claiming 'tamper-proof' or legal immutability since local filesystem administrator could recalculate forward hashes.",
+      "regression_test_required": "npm run audit:verify"
+    }
+  ]
+}

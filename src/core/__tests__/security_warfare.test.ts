@@ -233,14 +233,21 @@ describe("SECURITY_WARFARE_SUITE: Complete Hostile-Evaluator Verification", () =
     });
 
     it("Valid signature with non-existent order_id -> 200 ORDER_NOT_FOUND (graceful discard without crash)", async () => {
+      const payload = {
+        event: "payment.captured",
+        payload: { payment: { entity: { id: "pay_unknown", order_id: "order_non_existent", amount: 1000, status: "captured" } } },
+      };
+      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_webhook_secret_test";
+      const validSig = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+
       const res = await app.inject({
         method: "POST",
         url: "/webhooks/razorpay",
-        headers: { "x-razorpay-signature": "mock_signature" },
-        payload: {
-          event: "payment.captured",
-          payload: { payment: { entity: { id: "pay_unknown", order_id: "order_non_existent", amount: 1000, status: "captured" } } },
-        },
+        headers: { "x-razorpay-signature": validSig },
+        payload,
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("ORDER_NOT_FOUND");

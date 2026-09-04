@@ -31,6 +31,22 @@ export async function buildApp(customDb?: SqliteDatabase, customPolicy?: Merchan
   const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";
   const db = customDb || initDatabase(dbPath);
   const policy = customPolicy || defaultPolicy;
+
+  // Preserve raw body bytes for cryptographic signature verification (HMAC SHA-256)
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    try {
+      const rawStr = typeof body === "string" ? body : (body ? body.toString("utf-8") : "");
+      (req as any).rawBody = rawStr;
+      if (req.raw) {
+        (req.raw as any).rawBody = rawStr;
+      }
+      const json = rawStr ? JSON.parse(rawStr) : {};
+      done(null, json);
+    } catch (err: any) {
+      done(err, undefined);
+    }
+  });
+
   await app.register(import('@fastify/rate-limit'), {
     global: false,
     max: 100,

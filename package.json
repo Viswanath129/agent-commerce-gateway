@@ -2,19 +2,20 @@
   "name": "agent-commerce-gateway",
   "version": "1.0.0",
   "description": "Merchant-Side Control Plane for AI-Originated Transactions on Razorpay (Track 01)",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build:ui": "vite build",
     "build:server": "tsc",
     "build": "tsc && vite build",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "demo": "tsx src/demo/simulation.ts",
     "benchmark": "tsx src/demo/benchmark.ts",
     "pentest": "tsx src/demo/pentest_runner.ts",
-    "audit:verify": "tsx scripts/verify_audit.ts"
+    "audit:verify": "tsx scripts/verify_audit.ts",
+    "verify:gcp": "tsx scripts/verify_gcp_deployment.ts"
   },
   "keywords": [
     "razorpay",

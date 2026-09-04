@@ -130,11 +130,17 @@ async function runDemo() {
     },
   };
 
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_webhook_secret_test";
+  const hmacSignature = crypto
+    .createHmac("sha256", webhookSecret)
+    .update(JSON.stringify(webhookPayload))
+    .digest("hex");
+
   const webhookRes = await app.inject({
     method: "POST",
     url: "/webhooks/razorpay",
     headers: {
-      "x-razorpay-signature": "mock_signature",
+      "x-razorpay-signature": hmacSignature,
       "x-razorpay-event-id": webhookEventId,
     },
     payload: webhookPayload,

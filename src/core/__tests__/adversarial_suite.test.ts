@@ -255,11 +255,17 @@ describe("ACG Comprehensive Adversarial Verification Suite", () => {
         },
       };
 
+      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "rzp_webhook_secret_test";
+      const validSig = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(JSON.stringify(payload))
+        .digest("hex");
+
       // 1st delivery
       const res1 = await app.inject({
         method: "POST",
         url: "/webhooks/razorpay",
-        headers: { "x-razorpay-signature": "mock_signature", "x-razorpay-event-id": eventId },
+        headers: { "x-razorpay-signature": validSig, "x-razorpay-event-id": eventId },
         payload,
       });
       expect(res1.statusCode).toBe(200);
@@ -269,7 +275,7 @@ describe("ACG Comprehensive Adversarial Verification Suite", () => {
       const res2 = await app.inject({
         method: "POST",
         url: "/webhooks/razorpay",
-        headers: { "x-razorpay-signature": "mock_signature", "x-razorpay-event-id": eventId },
+        headers: { "x-razorpay-signature": validSig, "x-razorpay-event-id": eventId },
         payload,
       });
       expect(res2.statusCode).toBe(200);

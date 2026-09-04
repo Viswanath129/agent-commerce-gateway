@@ -12,23 +12,25 @@
 
 ---
 
-### 0:30 – 1:10 | Phase 1: Nominal Authorized Checkout
-* **Action:** Launch an agent checkout for `SKU-MOUSE-PRO` with an Ed25519-signed mandate.
+### 0:30 – 1:10 | Phase 1: Conversational AI Buyer & Budget-Aware Cross-Sell
+* **Action:** AI buyer asks: *"I need a wireless keyboard under ₹2,000"*. Agent discovers Compact Keyboard (₹1,799.00) and recommends companion Ergonomic Mouse (₹899.00). Buyer accepts bundle (Total ₹2,698.00 <= ₹3,000.00 mandate limit).
 * **Observation:**
-  1. Mandate verified in `< 4 ms`.
-  2. Database computes authoritative total of ₹2,124.00 (₹1,800 + 18% GST).
-  3. Dual-resource engine locks 1 unit and ₹2,124.00 budget.
+  1. Mandate verified in `< 4 ms` (Ed25519 signature).
+  2. Database computes authoritative bundle total (₹2,698.00 incl GST).
+  3. Dual-resource engine locks inventory and allocates budget.
   4. Razorpay Order created (`order_...`).
-  5. SHA-256 audit block committed.
+  5. Revenue attribution records Base GMV + Cross-Sell Uplift GMV (+49.9%).
+  6. SHA-256 audit block committed.
 
 ---
 
-### 1:10 – 1:50 | Phase 2: Autonomous Budget Overstep
-* **Action:** Agent attempts to buy an Executive Chair (₹14,160.00) against a ₹5,000.00 mandate cap.
+### 1:10 – 1:50 | Phase 2: Over-Budget Cross-Sell Attack (Graceful Failure)
+* **Action:** Agent attempts to append Noise-Cancelling Studio Headset (₹1,500.00), pushing total to ₹4,198.00 against ₹3,000.00 mandate cap.
 * **Observation:**
-  1. Intercepted at Phase 4 with **`HTTP 403 MANDATE_BUDGET_EXCEEDED`**.
+  1. Intercepted at Policy Decision Point with **`HTTP 403 MANDATE_BUDGET_EXCEEDED`**.
   2. Zero inventory or budget locked.
   3. Razorpay rails are **never touched**.
+  4. Audit ledger seals the denial event.
 
 ---
 
