@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { DatabaseSync } from "node:sqlite";
+import crypto from "node:crypto";
+const nodeCrypto = crypto;
 import { CanonicalIntentSchema, type CanonicalIntent, type MerchantPolicy } from "../core/types.js";
-import { verifyMandateSignature } from "../core/crypto.js";
+import { verifyMandateSignature, generatePrincipalKeypair, signMandate } from "../core/crypto.js";
 import { CommerceTruthEngine, type TruthResolutionResult } from "../core/truth.js";
 import { PolicyEngine } from "../core/policy.js";
 import { DualResourceReservationEngine } from "../core/reservation.js";
@@ -341,9 +343,6 @@ export function registerGatewayRoutes(
 
   app.post("/dashboard/compatibility/test-adapter", async (request: FastifyRequest, reply: FastifyReply) => {
     const { protocol } = (request.body || {}) as { protocol: string };
-    const cryptoModule = await import("../core/crypto.js");
-    const nodeCrypto = await import("node:crypto");
-    const { generatePrincipalKeypair, signMandate } = cryptoModule;
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1000);
     const activePolicy = policyEngine.getPolicy();
@@ -477,12 +476,9 @@ export function registerGatewayRoutes(
 
   app.post("/dashboard/demo/run-scenario", async (request: FastifyRequest, reply: FastifyReply) => {
     const { scenario } = (request.body || {}) as { scenario: string };
-    const cryptoModule = await import("../core/crypto.js");
-    const nodeCrypto = await import("node:crypto");
-    const { generatePrincipalKeypair, signMandate } = cryptoModule;
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1000);
-    const intentId = nodeCrypto.randomUUID();
+    const intentId = crypto.randomUUID();
 
     if (scenario === "mandate-violation") {
       const mandateData = {

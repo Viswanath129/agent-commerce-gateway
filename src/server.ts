@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 import { initDatabase, type SqliteDatabase } from "./store/db.js";
@@ -47,7 +48,7 @@ export async function buildApp(customDb?: SqliteDatabase, customPolicy?: Merchan
     }
   });
 
-  await app.register(import('@fastify/rate-limit'), {
+  await app.register(rateLimit, {
     global: false,
     max: 100,
     timeWindow: '1 minute'

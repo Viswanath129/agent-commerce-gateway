@@ -10,14 +10,6 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
-var __esm = (fn, res, err) => function __init() {
-  if (err) throw err[0];
-  try {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-  } catch (e) {
-    throw err = [e], e;
-  }
-};
 var __commonJS = (cb, mod) => function __require2() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
@@ -35892,428 +35884,6 @@ ${body}`);
   }
 });
 
-// node_modules/dotenv/package.json
-var require_package2 = __commonJS({
-  "node_modules/dotenv/package.json"(exports, module) {
-    module.exports = {
-      name: "dotenv",
-      version: "16.6.1",
-      description: "Loads environment variables from .env file",
-      main: "lib/main.js",
-      types: "lib/main.d.ts",
-      exports: {
-        ".": {
-          types: "./lib/main.d.ts",
-          require: "./lib/main.js",
-          default: "./lib/main.js"
-        },
-        "./config": "./config.js",
-        "./config.js": "./config.js",
-        "./lib/env-options": "./lib/env-options.js",
-        "./lib/env-options.js": "./lib/env-options.js",
-        "./lib/cli-options": "./lib/cli-options.js",
-        "./lib/cli-options.js": "./lib/cli-options.js",
-        "./package.json": "./package.json"
-      },
-      scripts: {
-        "dts-check": "tsc --project tests/types/tsconfig.json",
-        lint: "standard",
-        pretest: "npm run lint && npm run dts-check",
-        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
-        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
-        prerelease: "npm test",
-        release: "standard-version"
-      },
-      repository: {
-        type: "git",
-        url: "git://github.com/motdotla/dotenv.git"
-      },
-      homepage: "https://github.com/motdotla/dotenv#readme",
-      funding: "https://dotenvx.com",
-      keywords: [
-        "dotenv",
-        "env",
-        ".env",
-        "environment",
-        "variables",
-        "config",
-        "settings"
-      ],
-      readmeFilename: "README.md",
-      license: "BSD-2-Clause",
-      devDependencies: {
-        "@types/node": "^18.11.3",
-        decache: "^4.6.2",
-        sinon: "^14.0.1",
-        standard: "^17.0.0",
-        "standard-version": "^9.5.0",
-        tap: "^19.2.0",
-        typescript: "^4.8.4"
-      },
-      engines: {
-        node: ">=12"
-      },
-      browser: {
-        fs: false
-      }
-    };
-  }
-});
-
-// node_modules/dotenv/lib/main.js
-var require_main = __commonJS({
-  "node_modules/dotenv/lib/main.js"(exports, module) {
-    var fs2 = __require("fs");
-    var path2 = __require("path");
-    var os = __require("os");
-    var crypto17 = __require("crypto");
-    var packageJson = require_package2();
-    var version = packageJson.version;
-    var LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
-    function parse(src) {
-      const obj = {};
-      let lines = src.toString();
-      lines = lines.replace(/\r\n?/mg, "\n");
-      let match;
-      while ((match = LINE.exec(lines)) != null) {
-        const key = match[1];
-        let value = match[2] || "";
-        value = value.trim();
-        const maybeQuote = value[0];
-        value = value.replace(/^(['"`])([\s\S]*)\1$/mg, "$2");
-        if (maybeQuote === '"') {
-          value = value.replace(/\\n/g, "\n");
-          value = value.replace(/\\r/g, "\r");
-        }
-        obj[key] = value;
-      }
-      return obj;
-    }
-    function _parseVault(options) {
-      options = options || {};
-      const vaultPath = _vaultPath(options);
-      options.path = vaultPath;
-      const result = DotenvModule.configDotenv(options);
-      if (!result.parsed) {
-        const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
-        err.code = "MISSING_DATA";
-        throw err;
-      }
-      const keys = _dotenvKey(options).split(",");
-      const length = keys.length;
-      let decrypted;
-      for (let i = 0; i < length; i++) {
-        try {
-          const key = keys[i].trim();
-          const attrs = _instructions(result, key);
-          decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
-          break;
-        } catch (error) {
-          if (i + 1 >= length) {
-            throw error;
-          }
-        }
-      }
-      return DotenvModule.parse(decrypted);
-    }
-    function _warn(message) {
-      console.log(`[dotenv@${version}][WARN] ${message}`);
-    }
-    function _debug(message) {
-      console.log(`[dotenv@${version}][DEBUG] ${message}`);
-    }
-    function _log(message) {
-      console.log(`[dotenv@${version}] ${message}`);
-    }
-    function _dotenvKey(options) {
-      if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
-        return options.DOTENV_KEY;
-      }
-      if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
-        return process.env.DOTENV_KEY;
-      }
-      return "";
-    }
-    function _instructions(result, dotenvKey) {
-      let uri;
-      try {
-        uri = new URL(dotenvKey);
-      } catch (error) {
-        if (error.code === "ERR_INVALID_URL") {
-          const err = new Error("INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development");
-          err.code = "INVALID_DOTENV_KEY";
-          throw err;
-        }
-        throw error;
-      }
-      const key = uri.password;
-      if (!key) {
-        const err = new Error("INVALID_DOTENV_KEY: Missing key part");
-        err.code = "INVALID_DOTENV_KEY";
-        throw err;
-      }
-      const environment = uri.searchParams.get("environment");
-      if (!environment) {
-        const err = new Error("INVALID_DOTENV_KEY: Missing environment part");
-        err.code = "INVALID_DOTENV_KEY";
-        throw err;
-      }
-      const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
-      const ciphertext = result.parsed[environmentKey];
-      if (!ciphertext) {
-        const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
-        err.code = "NOT_FOUND_DOTENV_ENVIRONMENT";
-        throw err;
-      }
-      return { ciphertext, key };
-    }
-    function _vaultPath(options) {
-      let possibleVaultPath = null;
-      if (options && options.path && options.path.length > 0) {
-        if (Array.isArray(options.path)) {
-          for (const filepath of options.path) {
-            if (fs2.existsSync(filepath)) {
-              possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
-            }
-          }
-        } else {
-          possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
-        }
-      } else {
-        possibleVaultPath = path2.resolve(process.cwd(), ".env.vault");
-      }
-      if (fs2.existsSync(possibleVaultPath)) {
-        return possibleVaultPath;
-      }
-      return null;
-    }
-    function _resolveHome(envPath) {
-      return envPath[0] === "~" ? path2.join(os.homedir(), envPath.slice(1)) : envPath;
-    }
-    function _configVault(options) {
-      const debug = Boolean(options && options.debug);
-      const quiet = options && "quiet" in options ? options.quiet : true;
-      if (debug || !quiet) {
-        _log("Loading env from encrypted .env.vault");
-      }
-      const parsed = DotenvModule._parseVault(options);
-      let processEnv = process.env;
-      if (options && options.processEnv != null) {
-        processEnv = options.processEnv;
-      }
-      DotenvModule.populate(processEnv, parsed, options);
-      return { parsed };
-    }
-    function configDotenv(options) {
-      const dotenvPath = path2.resolve(process.cwd(), ".env");
-      let encoding = "utf8";
-      const debug = Boolean(options && options.debug);
-      const quiet = options && "quiet" in options ? options.quiet : true;
-      if (options && options.encoding) {
-        encoding = options.encoding;
-      } else {
-        if (debug) {
-          _debug("No encoding is specified. UTF-8 is used by default");
-        }
-      }
-      let optionPaths = [dotenvPath];
-      if (options && options.path) {
-        if (!Array.isArray(options.path)) {
-          optionPaths = [_resolveHome(options.path)];
-        } else {
-          optionPaths = [];
-          for (const filepath of options.path) {
-            optionPaths.push(_resolveHome(filepath));
-          }
-        }
-      }
-      let lastError;
-      const parsedAll = {};
-      for (const path3 of optionPaths) {
-        try {
-          const parsed = DotenvModule.parse(fs2.readFileSync(path3, { encoding }));
-          DotenvModule.populate(parsedAll, parsed, options);
-        } catch (e) {
-          if (debug) {
-            _debug(`Failed to load ${path3} ${e.message}`);
-          }
-          lastError = e;
-        }
-      }
-      let processEnv = process.env;
-      if (options && options.processEnv != null) {
-        processEnv = options.processEnv;
-      }
-      DotenvModule.populate(processEnv, parsedAll, options);
-      if (debug || !quiet) {
-        const keysCount = Object.keys(parsedAll).length;
-        const shortPaths = [];
-        for (const filePath of optionPaths) {
-          try {
-            const relative = path2.relative(process.cwd(), filePath);
-            shortPaths.push(relative);
-          } catch (e) {
-            if (debug) {
-              _debug(`Failed to load ${filePath} ${e.message}`);
-            }
-            lastError = e;
-          }
-        }
-        _log(`injecting env (${keysCount}) from ${shortPaths.join(",")}`);
-      }
-      if (lastError) {
-        return { parsed: parsedAll, error: lastError };
-      } else {
-        return { parsed: parsedAll };
-      }
-    }
-    function config(options) {
-      if (_dotenvKey(options).length === 0) {
-        return DotenvModule.configDotenv(options);
-      }
-      const vaultPath = _vaultPath(options);
-      if (!vaultPath) {
-        _warn(`You set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}. Did you forget to build it?`);
-        return DotenvModule.configDotenv(options);
-      }
-      return DotenvModule._configVault(options);
-    }
-    function decrypt(encrypted, keyStr) {
-      const key = Buffer.from(keyStr.slice(-64), "hex");
-      let ciphertext = Buffer.from(encrypted, "base64");
-      const nonce = ciphertext.subarray(0, 12);
-      const authTag = ciphertext.subarray(-16);
-      ciphertext = ciphertext.subarray(12, -16);
-      try {
-        const aesgcm = crypto17.createDecipheriv("aes-256-gcm", key, nonce);
-        aesgcm.setAuthTag(authTag);
-        return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
-      } catch (error) {
-        const isRange = error instanceof RangeError;
-        const invalidKeyLength = error.message === "Invalid key length";
-        const decryptionFailed = error.message === "Unsupported state or unable to authenticate data";
-        if (isRange || invalidKeyLength) {
-          const err = new Error("INVALID_DOTENV_KEY: It must be 64 characters long (or more)");
-          err.code = "INVALID_DOTENV_KEY";
-          throw err;
-        } else if (decryptionFailed) {
-          const err = new Error("DECRYPTION_FAILED: Please check your DOTENV_KEY");
-          err.code = "DECRYPTION_FAILED";
-          throw err;
-        } else {
-          throw error;
-        }
-      }
-    }
-    function populate(processEnv, parsed, options = {}) {
-      const debug = Boolean(options && options.debug);
-      const override = Boolean(options && options.override);
-      if (typeof parsed !== "object") {
-        const err = new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");
-        err.code = "OBJECT_REQUIRED";
-        throw err;
-      }
-      for (const key of Object.keys(parsed)) {
-        if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
-          if (override === true) {
-            processEnv[key] = parsed[key];
-          }
-          if (debug) {
-            if (override === true) {
-              _debug(`"${key}" is already defined and WAS overwritten`);
-            } else {
-              _debug(`"${key}" is already defined and was NOT overwritten`);
-            }
-          }
-        } else {
-          processEnv[key] = parsed[key];
-        }
-      }
-    }
-    var DotenvModule = {
-      configDotenv,
-      _configVault,
-      _parseVault,
-      config,
-      decrypt,
-      parse,
-      populate
-    };
-    module.exports.configDotenv = DotenvModule.configDotenv;
-    module.exports._configVault = DotenvModule._configVault;
-    module.exports._parseVault = DotenvModule._parseVault;
-    module.exports.config = DotenvModule.config;
-    module.exports.decrypt = DotenvModule.decrypt;
-    module.exports.parse = DotenvModule.parse;
-    module.exports.populate = DotenvModule.populate;
-    module.exports = DotenvModule;
-  }
-});
-
-// src/core/crypto.ts
-var crypto_exports = {};
-__export(crypto_exports, {
-  generatePrincipalKeypair: () => generatePrincipalKeypair,
-  getCanonicalMandateBytes: () => getCanonicalMandateBytes,
-  signMandate: () => signMandate,
-  verifyMandateSignature: () => verifyMandateSignature
-});
-import crypto from "node:crypto";
-function getCanonicalMandateBytes(mandate) {
-  const canonicalObject = {
-    mandate_id: mandate.mandate_id,
-    principal_public_key: mandate.principal_public_key,
-    budget_limit: mandate.budget_limit,
-    currency: mandate.currency,
-    merchant_whitelist: mandate.merchant_whitelist ? [...mandate.merchant_whitelist].sort() : void 0,
-    category_whitelist: mandate.category_whitelist ? [...mandate.category_whitelist].sort() : void 0,
-    expiry: mandate.expiry
-  };
-  return Buffer.from(JSON.stringify(canonicalObject));
-}
-function verifyMandateSignature(mandate) {
-  try {
-    const dataBytes = getCanonicalMandateBytes(mandate);
-    const publicKeyBuffer = Buffer.from(mandate.principal_public_key, "hex");
-    const signatureBuffer = Buffer.from(mandate.signature, "hex");
-    const keyObject = crypto.createPublicKey({
-      key: Buffer.concat([
-        Buffer.from("302a300506032b6570032100", "hex"),
-        // Ed25519 SPKI prefix
-        publicKeyBuffer
-      ]),
-      format: "der",
-      type: "spki"
-    });
-    return crypto.verify(null, dataBytes, keyObject, signatureBuffer);
-  } catch (error) {
-    return false;
-  }
-}
-function generatePrincipalKeypair() {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-  const exportedSpki = publicKey.export({ type: "spki", format: "der" });
-  const rawPublicKey = exportedSpki.subarray(exportedSpki.length - 32);
-  const exportedPkcs8 = privateKey.export({ type: "pkcs8", format: "der" });
-  const rawPrivateKey = exportedPkcs8.subarray(exportedPkcs8.length - 32);
-  return {
-    publicKeyHex: rawPublicKey.toString("hex"),
-    privateKeyHex: rawPrivateKey.toString("hex"),
-    privateKeyObject: privateKey,
-    publicKeyObject: publicKey
-  };
-}
-function signMandate(mandateData, privateKeyObject) {
-  const dataBytes = getCanonicalMandateBytes(mandateData);
-  const signature = crypto.sign(null, dataBytes, privateKeyObject);
-  return signature.toString("hex");
-}
-var init_crypto = __esm({
-  "src/core/crypto.ts"() {
-    "use strict";
-  }
-});
-
 // node_modules/ip-address/dist/address-error.js
 var require_address_error = __commonJS({
   "node_modules/ip-address/dist/address-error.js"(exports) {
@@ -39164,8 +38734,8 @@ var require_rate_limit = __commonJS({
           return;
         }
         req[rateLimitRan] = true;
-        const rateLimit = await applyRateLimit(pluginComponent, params, req);
-        if (rateLimit.isAllowed) {
+        const rateLimit2 = await applyRateLimit(pluginComponent, params, req);
+        if (rateLimit2.isAllowed) {
           return;
         }
         const {
@@ -39176,7 +38746,7 @@ var require_rate_limit = __commonJS({
           ttlInSeconds,
           isExceeded,
           isBanned
-        } = rateLimit;
+        } = rateLimit2;
         if (!isExceeded) {
           if (params.addHeadersOnExceeding[params.labels.rateLimit]) {
             res.header(params.labels.rateLimit, max);
@@ -39228,8 +38798,367 @@ var require_rate_limit = __commonJS({
   }
 });
 
+// node_modules/dotenv/package.json
+var require_package2 = __commonJS({
+  "node_modules/dotenv/package.json"(exports, module) {
+    module.exports = {
+      name: "dotenv",
+      version: "16.6.1",
+      description: "Loads environment variables from .env file",
+      main: "lib/main.js",
+      types: "lib/main.d.ts",
+      exports: {
+        ".": {
+          types: "./lib/main.d.ts",
+          require: "./lib/main.js",
+          default: "./lib/main.js"
+        },
+        "./config": "./config.js",
+        "./config.js": "./config.js",
+        "./lib/env-options": "./lib/env-options.js",
+        "./lib/env-options.js": "./lib/env-options.js",
+        "./lib/cli-options": "./lib/cli-options.js",
+        "./lib/cli-options.js": "./lib/cli-options.js",
+        "./package.json": "./package.json"
+      },
+      scripts: {
+        "dts-check": "tsc --project tests/types/tsconfig.json",
+        lint: "standard",
+        pretest: "npm run lint && npm run dts-check",
+        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
+        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
+        prerelease: "npm test",
+        release: "standard-version"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/motdotla/dotenv.git"
+      },
+      homepage: "https://github.com/motdotla/dotenv#readme",
+      funding: "https://dotenvx.com",
+      keywords: [
+        "dotenv",
+        "env",
+        ".env",
+        "environment",
+        "variables",
+        "config",
+        "settings"
+      ],
+      readmeFilename: "README.md",
+      license: "BSD-2-Clause",
+      devDependencies: {
+        "@types/node": "^18.11.3",
+        decache: "^4.6.2",
+        sinon: "^14.0.1",
+        standard: "^17.0.0",
+        "standard-version": "^9.5.0",
+        tap: "^19.2.0",
+        typescript: "^4.8.4"
+      },
+      engines: {
+        node: ">=12"
+      },
+      browser: {
+        fs: false
+      }
+    };
+  }
+});
+
+// node_modules/dotenv/lib/main.js
+var require_main = __commonJS({
+  "node_modules/dotenv/lib/main.js"(exports, module) {
+    var fs2 = __require("fs");
+    var path2 = __require("path");
+    var os = __require("os");
+    var crypto18 = __require("crypto");
+    var packageJson = require_package2();
+    var version = packageJson.version;
+    var LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+    function parse(src) {
+      const obj = {};
+      let lines = src.toString();
+      lines = lines.replace(/\r\n?/mg, "\n");
+      let match;
+      while ((match = LINE.exec(lines)) != null) {
+        const key = match[1];
+        let value = match[2] || "";
+        value = value.trim();
+        const maybeQuote = value[0];
+        value = value.replace(/^(['"`])([\s\S]*)\1$/mg, "$2");
+        if (maybeQuote === '"') {
+          value = value.replace(/\\n/g, "\n");
+          value = value.replace(/\\r/g, "\r");
+        }
+        obj[key] = value;
+      }
+      return obj;
+    }
+    function _parseVault(options) {
+      options = options || {};
+      const vaultPath = _vaultPath(options);
+      options.path = vaultPath;
+      const result = DotenvModule.configDotenv(options);
+      if (!result.parsed) {
+        const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
+        err.code = "MISSING_DATA";
+        throw err;
+      }
+      const keys = _dotenvKey(options).split(",");
+      const length = keys.length;
+      let decrypted;
+      for (let i = 0; i < length; i++) {
+        try {
+          const key = keys[i].trim();
+          const attrs = _instructions(result, key);
+          decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
+          break;
+        } catch (error) {
+          if (i + 1 >= length) {
+            throw error;
+          }
+        }
+      }
+      return DotenvModule.parse(decrypted);
+    }
+    function _warn(message) {
+      console.log(`[dotenv@${version}][WARN] ${message}`);
+    }
+    function _debug(message) {
+      console.log(`[dotenv@${version}][DEBUG] ${message}`);
+    }
+    function _log(message) {
+      console.log(`[dotenv@${version}] ${message}`);
+    }
+    function _dotenvKey(options) {
+      if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
+        return options.DOTENV_KEY;
+      }
+      if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
+        return process.env.DOTENV_KEY;
+      }
+      return "";
+    }
+    function _instructions(result, dotenvKey) {
+      let uri;
+      try {
+        uri = new URL(dotenvKey);
+      } catch (error) {
+        if (error.code === "ERR_INVALID_URL") {
+          const err = new Error("INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        }
+        throw error;
+      }
+      const key = uri.password;
+      if (!key) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing key part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environment = uri.searchParams.get("environment");
+      if (!environment) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing environment part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
+      const ciphertext = result.parsed[environmentKey];
+      if (!ciphertext) {
+        const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
+        err.code = "NOT_FOUND_DOTENV_ENVIRONMENT";
+        throw err;
+      }
+      return { ciphertext, key };
+    }
+    function _vaultPath(options) {
+      let possibleVaultPath = null;
+      if (options && options.path && options.path.length > 0) {
+        if (Array.isArray(options.path)) {
+          for (const filepath of options.path) {
+            if (fs2.existsSync(filepath)) {
+              possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
+            }
+          }
+        } else {
+          possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
+        }
+      } else {
+        possibleVaultPath = path2.resolve(process.cwd(), ".env.vault");
+      }
+      if (fs2.existsSync(possibleVaultPath)) {
+        return possibleVaultPath;
+      }
+      return null;
+    }
+    function _resolveHome(envPath) {
+      return envPath[0] === "~" ? path2.join(os.homedir(), envPath.slice(1)) : envPath;
+    }
+    function _configVault(options) {
+      const debug = Boolean(options && options.debug);
+      const quiet = options && "quiet" in options ? options.quiet : true;
+      if (debug || !quiet) {
+        _log("Loading env from encrypted .env.vault");
+      }
+      const parsed = DotenvModule._parseVault(options);
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      DotenvModule.populate(processEnv, parsed, options);
+      return { parsed };
+    }
+    function configDotenv(options) {
+      const dotenvPath = path2.resolve(process.cwd(), ".env");
+      let encoding = "utf8";
+      const debug = Boolean(options && options.debug);
+      const quiet = options && "quiet" in options ? options.quiet : true;
+      if (options && options.encoding) {
+        encoding = options.encoding;
+      } else {
+        if (debug) {
+          _debug("No encoding is specified. UTF-8 is used by default");
+        }
+      }
+      let optionPaths = [dotenvPath];
+      if (options && options.path) {
+        if (!Array.isArray(options.path)) {
+          optionPaths = [_resolveHome(options.path)];
+        } else {
+          optionPaths = [];
+          for (const filepath of options.path) {
+            optionPaths.push(_resolveHome(filepath));
+          }
+        }
+      }
+      let lastError;
+      const parsedAll = {};
+      for (const path3 of optionPaths) {
+        try {
+          const parsed = DotenvModule.parse(fs2.readFileSync(path3, { encoding }));
+          DotenvModule.populate(parsedAll, parsed, options);
+        } catch (e) {
+          if (debug) {
+            _debug(`Failed to load ${path3} ${e.message}`);
+          }
+          lastError = e;
+        }
+      }
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      DotenvModule.populate(processEnv, parsedAll, options);
+      if (debug || !quiet) {
+        const keysCount = Object.keys(parsedAll).length;
+        const shortPaths = [];
+        for (const filePath of optionPaths) {
+          try {
+            const relative = path2.relative(process.cwd(), filePath);
+            shortPaths.push(relative);
+          } catch (e) {
+            if (debug) {
+              _debug(`Failed to load ${filePath} ${e.message}`);
+            }
+            lastError = e;
+          }
+        }
+        _log(`injecting env (${keysCount}) from ${shortPaths.join(",")}`);
+      }
+      if (lastError) {
+        return { parsed: parsedAll, error: lastError };
+      } else {
+        return { parsed: parsedAll };
+      }
+    }
+    function config(options) {
+      if (_dotenvKey(options).length === 0) {
+        return DotenvModule.configDotenv(options);
+      }
+      const vaultPath = _vaultPath(options);
+      if (!vaultPath) {
+        _warn(`You set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}. Did you forget to build it?`);
+        return DotenvModule.configDotenv(options);
+      }
+      return DotenvModule._configVault(options);
+    }
+    function decrypt(encrypted, keyStr) {
+      const key = Buffer.from(keyStr.slice(-64), "hex");
+      let ciphertext = Buffer.from(encrypted, "base64");
+      const nonce = ciphertext.subarray(0, 12);
+      const authTag = ciphertext.subarray(-16);
+      ciphertext = ciphertext.subarray(12, -16);
+      try {
+        const aesgcm = crypto18.createDecipheriv("aes-256-gcm", key, nonce);
+        aesgcm.setAuthTag(authTag);
+        return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
+      } catch (error) {
+        const isRange = error instanceof RangeError;
+        const invalidKeyLength = error.message === "Invalid key length";
+        const decryptionFailed = error.message === "Unsupported state or unable to authenticate data";
+        if (isRange || invalidKeyLength) {
+          const err = new Error("INVALID_DOTENV_KEY: It must be 64 characters long (or more)");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        } else if (decryptionFailed) {
+          const err = new Error("DECRYPTION_FAILED: Please check your DOTENV_KEY");
+          err.code = "DECRYPTION_FAILED";
+          throw err;
+        } else {
+          throw error;
+        }
+      }
+    }
+    function populate(processEnv, parsed, options = {}) {
+      const debug = Boolean(options && options.debug);
+      const override = Boolean(options && options.override);
+      if (typeof parsed !== "object") {
+        const err = new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");
+        err.code = "OBJECT_REQUIRED";
+        throw err;
+      }
+      for (const key of Object.keys(parsed)) {
+        if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
+          if (override === true) {
+            processEnv[key] = parsed[key];
+          }
+          if (debug) {
+            if (override === true) {
+              _debug(`"${key}" is already defined and WAS overwritten`);
+            } else {
+              _debug(`"${key}" is already defined and was NOT overwritten`);
+            }
+          }
+        } else {
+          processEnv[key] = parsed[key];
+        }
+      }
+    }
+    var DotenvModule = {
+      configDotenv,
+      _configVault,
+      _parseVault,
+      config,
+      decrypt,
+      parse,
+      populate
+    };
+    module.exports.configDotenv = DotenvModule.configDotenv;
+    module.exports._configVault = DotenvModule._configVault;
+    module.exports._parseVault = DotenvModule._parseVault;
+    module.exports.config = DotenvModule.config;
+    module.exports.decrypt = DotenvModule.decrypt;
+    module.exports.parse = DotenvModule.parse;
+    module.exports.populate = DotenvModule.populate;
+    module.exports = DotenvModule;
+  }
+});
+
 // src/server.ts
 var import_fastify = __toESM(require_fastify(), 1);
+var import_rate_limit = __toESM(require_rate_limit(), 1);
 var import_dotenv = __toESM(require_main(), 1);
 import { fileURLToPath } from "node:url";
 
@@ -39544,6 +39473,9 @@ function initDatabase(dbPath = "./data/acg_gateway.db") {
   `);
   return db;
 }
+
+// src/gateway/router.ts
+import crypto17 from "node:crypto";
 
 // node_modules/zod/v3/external.js
 var external_exports = {};
@@ -43613,8 +43545,57 @@ var CanonicalIntentSchema = external_exports.object({
   proposed_items: external_exports.array(ProposedItemSchema).nonempty()
 });
 
-// src/gateway/router.ts
-init_crypto();
+// src/core/crypto.ts
+import crypto from "node:crypto";
+function getCanonicalMandateBytes(mandate) {
+  const canonicalObject = {
+    mandate_id: mandate.mandate_id,
+    principal_public_key: mandate.principal_public_key,
+    budget_limit: mandate.budget_limit,
+    currency: mandate.currency,
+    merchant_whitelist: mandate.merchant_whitelist ? [...mandate.merchant_whitelist].sort() : void 0,
+    category_whitelist: mandate.category_whitelist ? [...mandate.category_whitelist].sort() : void 0,
+    expiry: mandate.expiry
+  };
+  return Buffer.from(JSON.stringify(canonicalObject));
+}
+function verifyMandateSignature(mandate) {
+  try {
+    const dataBytes = getCanonicalMandateBytes(mandate);
+    const publicKeyBuffer = Buffer.from(mandate.principal_public_key, "hex");
+    const signatureBuffer = Buffer.from(mandate.signature, "hex");
+    const keyObject = crypto.createPublicKey({
+      key: Buffer.concat([
+        Buffer.from("302a300506032b6570032100", "hex"),
+        // Ed25519 SPKI prefix
+        publicKeyBuffer
+      ]),
+      format: "der",
+      type: "spki"
+    });
+    return crypto.verify(null, dataBytes, keyObject, signatureBuffer);
+  } catch (error) {
+    return false;
+  }
+}
+function generatePrincipalKeypair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const exportedSpki = publicKey.export({ type: "spki", format: "der" });
+  const rawPublicKey = exportedSpki.subarray(exportedSpki.length - 32);
+  const exportedPkcs8 = privateKey.export({ type: "pkcs8", format: "der" });
+  const rawPrivateKey = exportedPkcs8.subarray(exportedPkcs8.length - 32);
+  return {
+    publicKeyHex: rawPublicKey.toString("hex"),
+    privateKeyHex: rawPrivateKey.toString("hex"),
+    privateKeyObject: privateKey,
+    publicKeyObject: publicKey
+  };
+}
+function signMandate(mandateData, privateKeyObject) {
+  const dataBytes = getCanonicalMandateBytes(mandateData);
+  const signature = crypto.sign(null, dataBytes, privateKeyObject);
+  return signature.toString("hex");
+}
 
 // src/core/truth.ts
 var CommerceTruthEngine = class {
@@ -45702,7 +45683,6 @@ var HierarchicalBudgetEngine = class {
 };
 
 // src/core/pdp.ts
-init_crypto();
 import crypto13 from "node:crypto";
 var PolicyDecisionPoint = class {
   db;
@@ -46925,6 +46905,7 @@ var PolicyConstrainedRecommendationEngine = class {
 };
 
 // src/gateway/router.ts
+var nodeCrypto = crypto17;
 function registerGatewayRoutes(app, db, policy) {
   const auditLedger = new AuditLedger(db);
   const truthEngine = new CommerceTruthEngine(db);
@@ -47195,10 +47176,7 @@ function registerGatewayRoutes(app, db, policy) {
   });
   app.post("/dashboard/compatibility/test-adapter", async (request, reply) => {
     const { protocol } = request.body || {};
-    const cryptoModule = await Promise.resolve().then(() => (init_crypto(), crypto_exports));
-    const nodeCrypto = await import("node:crypto");
-    const { generatePrincipalKeypair: generatePrincipalKeypair2, signMandate: signMandate2 } = cryptoModule;
-    const keypair = generatePrincipalKeypair2();
+    const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1e3);
     const activePolicy = policyEngine.getPolicy();
     const mandateData = {
@@ -47211,7 +47189,7 @@ function registerGatewayRoutes(app, db, policy) {
       category_whitelist: ["electronics"],
       expiry: now + 3600
     };
-    const signature = signMandate2(mandateData, keypair.privateKeyObject);
+    const signature = signMandate(mandateData, keypair.privateKeyObject);
     const mandate = { ...mandateData, signature };
     let testPayload;
     const intentId = nodeCrypto.randomUUID();
@@ -47326,12 +47304,9 @@ function registerGatewayRoutes(app, db, policy) {
   });
   app.post("/dashboard/demo/run-scenario", async (request, reply) => {
     const { scenario } = request.body || {};
-    const cryptoModule = await Promise.resolve().then(() => (init_crypto(), crypto_exports));
-    const nodeCrypto = await import("node:crypto");
-    const { generatePrincipalKeypair: generatePrincipalKeypair2, signMandate: signMandate2 } = cryptoModule;
-    const keypair = generatePrincipalKeypair2();
+    const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1e3);
-    const intentId = nodeCrypto.randomUUID();
+    const intentId = crypto17.randomUUID();
     if (scenario === "mandate-violation") {
       const mandateData2 = {
         mandate_id: `man_viol_${Date.now()}`,
@@ -47343,7 +47318,7 @@ function registerGatewayRoutes(app, db, policy) {
         category_whitelist: ["electronics", "furniture"],
         expiry: now + 3600
       };
-      const signature2 = signMandate2(mandateData2, keypair.privateKeyObject);
+      const signature2 = signMandate(mandateData2, keypair.privateKeyObject);
       const payload = {
         intent_id: intentId,
         client_nonce: nodeCrypto.randomBytes(16).toString("hex"),
@@ -47366,7 +47341,7 @@ function registerGatewayRoutes(app, db, policy) {
         category_whitelist: ["electronics"],
         expiry: now + 3600
       };
-      const signature2 = signMandate2(mandateData2, keypair.privateKeyObject);
+      const signature2 = signMandate(mandateData2, keypair.privateKeyObject);
       const p1 = {
         intent_id: nodeCrypto.randomUUID(),
         client_nonce: nodeCrypto.randomBytes(16).toString("hex"),
@@ -47418,7 +47393,7 @@ function registerGatewayRoutes(app, db, policy) {
         category_whitelist: ["electronics"],
         expiry: now + 3600
       };
-      const signature2 = signMandate2(mandateData2, keypair.privateKeyObject);
+      const signature2 = signMandate(mandateData2, keypair.privateKeyObject);
       const checkoutRes2 = await app.inject({
         method: "POST",
         url: "/v1/agent/checkout",
@@ -47464,7 +47439,7 @@ function registerGatewayRoutes(app, db, policy) {
       category_whitelist: ["electronics"],
       expiry: now + 3600
     };
-    const signature = signMandate2(mandateData, keypair.privateKeyObject);
+    const signature = signMandate(mandateData, keypair.privateKeyObject);
     const checkoutRes = await app.inject({
       method: "POST",
       url: "/v1/agent/checkout",
@@ -48659,7 +48634,7 @@ async function buildApp(customDb, customPolicy) {
       done(err, void 0);
     }
   });
-  await app.register(Promise.resolve().then(() => __toESM(require_rate_limit(), 1)), {
+  await app.register(import_rate_limit.default, {
     global: false,
     max: 100,
     timeWindow: "1 minute"
