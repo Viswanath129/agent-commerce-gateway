@@ -1,11 +1,10 @@
 {
-  "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/(v1|api|adapters|dashboard/metrics|webhook)(.*)",
-      "destination": "/api/index"
+      "destination": "/api/gateway"
     },
     {
       "source": "/dashboard",
