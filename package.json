@@ -11,7 +11,7 @@
     "dev": "tsx watch src/server.ts",
     "build:ui": "vite build",
     "build:server": "tsc",
-    "build": "tsc && vite build && npx esbuild api/server_entry.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js",
+    "build": "tsc && vite build && npx esbuild api/server_entry.ts --bundle --platform=node --format=esm --outfile=api/index.js",
     "start": "node dist/src/server.js",
     "test": "vitest run",
     "demo": "tsx src/demo/simulation.ts",
