@@ -12,8 +12,8 @@
 
 | Dimension | Standard / Target | Verified Result | Quality Status |
 | :--- | :--- | :--- | :---: |
-| **Production Build** | Zero TypeScript errors, bundled assets | `tsc && vite build` passed in 3.54s | **PASS** |
-| **Unit & Integration Suite** | 100% test passing rate | **57 / 57 Tests Passed** (7 Test Files) | **PASS** |
+| **Production Build** | Zero TypeScript errors, bundled assets | `tsc && vite build` passed in 3.94s | **PASS** |
+| **Unit & Integration Suite** | 100% test passing rate | **77 / 77 Tests Passed** (9 Test Files) | **PASS** |
 | **Security Pentest Suite** | 19 adversarial vectors intercepted | **19 / 19 Vectors Passed** (100% Defense) | **PASS** |
 | **Cold-Start Performance** | Sub-500ms time-to-first-transaction | **338.08 ms** (HTTP 201 Created) | **PASS** |
 | **End-to-End Simulation** | 5 automated lifecycle phases | **5 / 5 Phases Passed** (Zero Failures) | **PASS** |
@@ -22,7 +22,7 @@
 
 ---
 
-## 2. Comprehensive Test Suite Breakdown (57 / 57 PASSED)
+## 2. Comprehensive Test Suite Breakdown (77 / 77 PASSED)
 
 ```text
 ✓ src/core/__tests__/hooks.test.ts (1 test)
@@ -39,6 +39,28 @@
   ├── 5. Mandate revocation without token -> 401 Unauthorized
   ├── 6. Mandate revocation with admin token -> 200 OK
   └── 7. Audit ledger verification with admin token -> 200 OK
+✓ src/core/__tests__/authority_boundary.test.ts (7 tests)
+  ├── 1. Fake price attack -> Merchant truth calculates ₹4,130.00 from DB
+  ├── 2. Fake stock attack -> Rejected at Truth Gate
+  ├── 3. Fake product / SKU attack -> Rejected with 400 COMMERCE_TRUTH_REJECTION
+  ├── 4. Inactive / deleted product -> Rejected at Truth Gate
+  ├── 5. Catalog mutation before authorization -> Instant authoritative price update
+  ├── 6. Cross-merchant reuse / unauthorized target -> 403 MERCHANT_NOT_WHITELISTED
+  └── 7. Zero direct execution path -> Downstream API never called on failed auth
+✓ src/core/__tests__/security_warfare.test.ts (13 tests)
+  ├── 1. Concurrency Warfare: N agents, 1 inventory unit -> Exactly 1 succeeds, 4 blocked
+  ├── 2. Concurrency Warfare: Residual budget race -> Mandate balance strictly guarded
+  ├── 3. Concurrency Warfare: Duplicate intent_id replay -> Blocked with 409
+  ├── 4. Cryptographic Assurance: Bit flip in Ed25519 signature -> 401 Unauthorized
+  ├── 5. Cryptographic Assurance: Wrong public key substituted -> 401 Unauthorized
+  ├── 6. Webhook Security: Missing signature -> 401 Unauthorized
+  ├── 7. Webhook Security: Altered body with forged signature -> 401 Unauthorized
+  ├── 8. Webhook Security: Valid signature with unknown order_id -> 200 ORDER_NOT_FOUND
+  ├── 9. API Authorization: Privileged route without token -> 401 Unauthorized
+  ├── 10. API Authorization: Viewer token on policy write -> 403 Forbidden
+  ├── 11. API Authorization: Viewer token on mandate revoke -> 403 Forbidden
+  ├── 12. Input Sanitization: Zero quantity rejected -> 400 Bad Request
+  └── 13. Fail-Closed Resilience: Downstream rail failure -> Dual reservation rolled back (502)
 ✓ src/core/__tests__/protocol_adapters.test.ts (13 tests)
   ├── Native ACG Adapter normalization
   ├── Model Context Protocol (MCP) tool-call normalization

@@ -1,14 +1,16 @@
-name: CI & Quality Assurance
+name: ACG Continuous Integration & Quality Gate
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   verify:
+    name: Build, Test & Security Verification
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,19 +19,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm ci
 
-      - name: Typecheck & Build
+      - name: TypeScript Type Check & Production Build
         run: npm run build
 
-      - name: Run Test Suite (Vitest)
+      - name: Automated Unit & Integration Tests (Vitest)
         run: npm test
 
-      - name: Run Simulation Demo
-        run: npm run demo
-
-      - name: Run Live Penetration Tests
+      - name: Live Adversarial Penetration Suite
         run: npm run pentest
+
+      - name: Cryptographic Audit Ledger Integrity Verification
+        run: npm run audit:verify
+
+      - name: Cold-Start Performance Benchmark
+        run: npm run benchmark

@@ -13,7 +13,8 @@
     "test": "vitest run",
     "demo": "tsx src/demo/simulation.ts",
     "benchmark": "tsx src/demo/benchmark.ts",
-    "pentest": "tsx src/demo/pentest_runner.ts"
+    "pentest": "tsx src/demo/pentest_runner.ts",
+    "audit:verify": "tsx scripts/verify_audit.ts"
   },
   "keywords": [
     "razorpay",
