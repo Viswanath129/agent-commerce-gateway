@@ -33,7 +33,7 @@ export class RazorpayRailClient {
     const envId = process.env.RAZORPAY_KEY_ID;
     const envSecret = process.env.RAZORPAY_KEY_SECRET;
 
-    if (process.env.NODE_ENV === "production" && process.env.VERCEL_DEMO !== "1" && (!envId || !envSecret)) {
+    if (process.env.NODE_ENV === "production" && process.env.VERCEL !== "1" && process.env.VERCEL_DEMO !== "1" && process.env.DEMO_MODE !== "1" && (!envId || !envSecret)) {
       throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.");
     }
 
