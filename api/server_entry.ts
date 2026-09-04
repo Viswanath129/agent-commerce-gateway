@@ -26,13 +26,19 @@ async function getFastifyApp() {
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
     const app = await getFastifyApp();
-    app.server.emit("request", req, res);
+    await new Promise<void>((resolve, reject) => {
+      res.on("finish", () => resolve());
+      res.on("error", (err) => reject(err));
+      app.server.emit("request", req, res);
+    });
   } catch (err: any) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "FUNCTION_INITIALIZATION_ERROR",
-      message: err?.message || String(err)
-    }));
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({
+        error: "FUNCTION_INVOCATION_FAILED",
+        message: err?.message || String(err)
+      }));
+    }
   }
 }

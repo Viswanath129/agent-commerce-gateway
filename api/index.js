@@ -5525,14 +5525,20 @@ async function getFastifyApp() {
 async function handler(req, res) {
   try {
     const app = await getFastifyApp();
-    app.server.emit("request", req, res);
+    await new Promise((resolve, reject) => {
+      res.on("finish", () => resolve());
+      res.on("error", (err) => reject(err));
+      app.server.emit("request", req, res);
+    });
   } catch (err) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "FUNCTION_INITIALIZATION_ERROR",
-      message: err?.message || String(err)
-    }));
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({
+        error: "FUNCTION_INVOCATION_FAILED",
+        message: err?.message || String(err)
+      }));
+    }
   }
 }
 export {
