@@ -30,7 +30,7 @@
   "dependencies": {
     "@fastify/bearer-auth": "^10.1.3",
     "@fastify/rate-limit": "^11.2.0",
-    "@noble/ed25519": "^2.2.3",
+    "@noble/ed25519": "^3.2.0",
     "@tanstack/react-query": "^5.102.8",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
