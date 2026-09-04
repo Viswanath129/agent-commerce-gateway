@@ -23,7 +23,13 @@ const McpToolCallSchema = z.object({
       ).nonempty(),
       agent_metadata: z.object({
         model_runtime: z.string().optional(),
-        agent_id: z.string().optional(),
+        agent_id: z
+          .string()
+          .trim()
+          .min(1)
+          .max(64)
+          .regex(/^[a-zA-Z0-9_-]+$/, "agent_id must be 1-64 alphanumeric characters, dashes, or underscores")
+          .optional(),
         provider: z.string().optional(),
       }).optional(),
     }),
@@ -64,7 +70,19 @@ export class McpProtocolAdapter implements ProtocolAdapter {
       proposed_items: args.items.map((i) => ({ sku: i.sku, quantity: i.quantity })) as any,
     };
 
-    const agentId = args.agent_metadata?.agent_id || `mcp-agent-${intentId.slice(0, 8)}`;
+    // Validate and sanitize agent ID from agent_metadata
+    let agentId = `mcp-agent-${intentId.slice(0, 8)}`;
+    if (args.agent_metadata?.agent_id) {
+      const trimmed = args.agent_metadata.agent_id.trim();
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(trimmed)) {
+        return {
+          success: false,
+          error: "Invalid agent_id in agent_metadata: must be 1-64 alphanumeric, dash, or underscore characters",
+          code: "INVALID_AGENT_ID",
+        };
+      }
+      agentId = trimmed;
+    }
     const model = args.agent_metadata?.model_runtime || "mcp-client";
 
     const acgIntent: ACGIntent = {

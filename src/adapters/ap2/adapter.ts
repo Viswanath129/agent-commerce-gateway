@@ -46,9 +46,23 @@ export class Ap2ProtocolAdapter implements ProtocolAdapter {
     }
 
     const data = parseResult.data;
+
+    // Validate that AP2 payer public key strictly matches authorization mandate principal public key
+    if (data.payer.public_key !== data.authorization_mandate.principal_public_key) {
+      return {
+        success: false,
+        error: "Payer public key does not match authorization mandate principal public key",
+        code: "INVALID_AP2_KEY_BINDING",
+      };
+    }
+
     const intentId = data.payment_intent_id || crypto.randomUUID();
     const nonce = data.nonce || crypto.randomBytes(16).toString("hex");
     const ts = data.created_at || Math.floor(Date.now() / 1000);
+
+    // Bind agent ID deterministically from payer principal ID
+    const sanitizedPrincipal = data.payer.principal_id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const agentId = `ap2-agent-${sanitizedPrincipal}`;
 
     const canonical: CanonicalIntent = {
       intent_id: intentId,
@@ -68,7 +82,7 @@ export class Ap2ProtocolAdapter implements ProtocolAdapter {
         publicKey: data.authorization_mandate.principal_public_key,
       },
       agent: {
-        id: `ap2-agent-${intentId.slice(0, 8)}`,
+        id: agentId,
         provider: "AP2 Working Group",
         protocol: "AP2",
         publicKey: data.payer.public_key,
@@ -104,7 +118,7 @@ export class Ap2ProtocolAdapter implements ProtocolAdapter {
       metadata: {
         sourceProtocol: "AP2",
         rawHash,
-        agentId: `ap2-agent-${intentId.slice(0, 8)}`,
+        agentId,
         adapterVersion: this.specificationVersion,
       },
     };

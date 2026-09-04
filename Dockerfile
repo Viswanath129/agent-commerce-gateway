@@ -8,6 +8,7 @@ RUN npm ci
 COPY frontend/ ./frontend/
 COPY src/ ./src/
 COPY public/ ./public/
+COPY api/ ./api/
 
 RUN npm run build
 

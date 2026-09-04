@@ -39231,6 +39231,10 @@ function initDatabase(dbPath = "./data/acg_gateway.db") {
   }
   const db = new NativeDatabaseSync(dbPath);
   db.exec("PRAGMA foreign_keys = ON;");
+  if (dbPath !== ":memory:") {
+    db.exec("PRAGMA journal_mode = WAL;");
+  }
+  db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(`
     -- 1. Merchant Catalog Truth Table
     CREATE TABLE IF NOT EXISTS catalog_items (
@@ -39471,6 +39475,15 @@ function initDatabase(dbPath = "./data/acg_gateway.db") {
       metadata_json TEXT,
       created_at INTEGER NOT NULL
     );
+
+    -- 19. Replay Prevention: Used Nonces Table
+    CREATE TABLE IF NOT EXISTS used_nonces (
+      client_nonce TEXT NOT NULL,
+      mandate_id TEXT NOT NULL,
+      used_at INTEGER NOT NULL,
+      PRIMARY KEY (client_nonce, mandate_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_used_nonces_used_at ON used_nonces(used_at);
   `);
   return db;
 }
@@ -43703,6 +43716,16 @@ var CommerceTruthEngine = class {
     const categoriesSet = /* @__PURE__ */ new Set();
     const getItemStmt = this.db.prepare("SELECT * FROM catalog_items WHERE sku = ? AND is_active = 1");
     for (const proposed of proposedItems) {
+      if (!Number.isInteger(proposed.quantity) || proposed.quantity <= 0) {
+        return {
+          isValid: false,
+          error: `Invalid item quantity for SKU '${proposed.sku}': quantity must be a positive integer`,
+          resolvedItems: [],
+          totalAmount: 0,
+          totalTax: 0,
+          categories: []
+        };
+      }
       const row = getItemStmt.get(proposed.sku);
       if (!row) {
         return {
@@ -43997,28 +44020,47 @@ var AuditLedger = class {
    * Appends an audit entry with cryptographic hash chaining using rowid ordering.
    */
   logTransition(intentId, eventType, prevState, newState, details) {
-    const lastRow = this.db.prepare("SELECT record_hash FROM audit_ledger ORDER BY rowid DESC LIMIT 1").get();
-    const prevHash = lastRow?.record_hash || "GENESIS_BLOCK_0000000000000000";
-    const timestamp = Date.now();
-    const auditId = `audit_${crypto3.randomUUID()}`;
-    const detailsJson = JSON.stringify(details);
-    const blockPayload = `${auditId}|${intentId}|${timestamp}|${eventType}|${prevState || "NULL"}|${newState}|${detailsJson}|${prevHash}`;
-    const recordHash = crypto3.createHash("sha256").update(blockPayload).digest("hex");
-    this.db.prepare(`
-        INSERT INTO audit_ledger (
-          audit_id, intent_id, timestamp, event_type, previous_state, new_state, details_json, record_hash, previous_record_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(auditId, intentId, timestamp, eventType, prevState, newState, detailsJson, recordHash, prevHash);
-    return {
-      audit_id: auditId,
-      intent_id: intentId,
-      timestamp,
-      event_type: eventType,
-      previous_state: prevState,
-      new_state: newState,
-      details,
-      record_hash: recordHash
-    };
+    let inTx = false;
+    try {
+      this.db.exec("BEGIN IMMEDIATE;");
+      inTx = true;
+    } catch (e) {
+      if (!e.message?.includes("cannot start a transaction within a transaction")) {
+        throw e;
+      }
+    }
+    try {
+      const lastRow = this.db.prepare("SELECT record_hash FROM audit_ledger ORDER BY rowid DESC LIMIT 1").get();
+      const prevHash = lastRow?.record_hash || "GENESIS_BLOCK_0000000000000000";
+      const timestamp = Date.now();
+      const auditId = `audit_${crypto3.randomUUID()}`;
+      const detailsJson = JSON.stringify(details);
+      const blockPayload = `${auditId}|${intentId}|${timestamp}|${eventType}|${prevState || "NULL"}|${newState}|${detailsJson}|${prevHash}`;
+      const recordHash = crypto3.createHash("sha256").update(blockPayload).digest("hex");
+      this.db.prepare(`
+          INSERT INTO audit_ledger (
+            audit_id, intent_id, timestamp, event_type, previous_state, new_state, details_json, record_hash, previous_record_hash
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(auditId, intentId, timestamp, eventType, prevState, newState, detailsJson, recordHash, prevHash);
+      if (inTx) {
+        this.db.exec("COMMIT;");
+      }
+      return {
+        audit_id: auditId,
+        intent_id: intentId,
+        timestamp,
+        event_type: eventType,
+        previous_state: prevState,
+        new_state: newState,
+        details,
+        record_hash: recordHash
+      };
+    } catch (err) {
+      if (inTx) {
+        this.db.exec("ROLLBACK;");
+      }
+      throw err;
+    }
   }
   /**
    * Retrieves full audit trajectory for an intent.
@@ -44065,12 +44107,14 @@ var RazorpayRailClient = class {
   constructor(keyId, keySecret) {
     const envId = process.env.RAZORPAY_KEY_ID;
     const envSecret = process.env.RAZORPAY_KEY_SECRET;
-    if (process.env.NODE_ENV === "production" && (!envId || !envSecret)) {
+    if (process.env.NODE_ENV === "production" && process.env.VERCEL_DEMO !== "1" && (!envId || !envSecret)) {
       throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.");
     }
     this.keyId = keyId || envId || "rzp_test_mock";
-    this.keySecret = keySecret || envSecret || "mock_secret";
-    this.isLiveCredentials = this.keyId.startsWith("rzp_test_") && this.keyId !== "rzp_test_placeholder_key" && this.keyId !== "rzp_test_mock";
+    this.keySecret = keySecret || envSecret || "rzp_secret_mock";
+    this.isLiveCredentials = Boolean(
+      this.keyId && this.keySecret && this.keyId.startsWith("rzp_live_")
+    );
   }
   /**
    * Creates a Razorpay Order using documented `receipt` idempotency mechanism.
@@ -44188,6 +44232,14 @@ var RazorpayWebhookProcessor = class {
     if (process.env.NODE_ENV === "production" && this.webhookSecret === "rzp_webhook_secret_test" && !envSecret) {
       throw new Error("RAZORPAY_WEBHOOK_SECRET is required. No fallback secrets are permitted in production.");
     }
+    try {
+      this.db.exec("ALTER TABLE processed_webhook_events ADD COLUMN payload_hash TEXT;");
+    } catch {
+    }
+    try {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_webhook_payload_hash ON processed_webhook_events(payload_hash);");
+    } catch {
+    }
   }
   /**
    * Verifies Razorpay HMAC SHA256 Webhook Signature.
@@ -44221,129 +44273,187 @@ var RazorpayWebhookProcessor = class {
    * 3. Fulfillment dispatch and safe policy-gated refund on failure
    */
   async processEvent(eventId, eventPayload) {
-    const existingEvent = this.db.prepare("SELECT event_id FROM processed_webhook_events WHERE event_id = ?").get(eventId);
-    if (existingEvent) {
-      return { status: "DUPLICATE_IGNORED", message: `Event ID '${eventId}' already processed` };
+    const payloadHash = crypto5.createHash("sha256").update(JSON.stringify(eventPayload)).digest("hex");
+    let inTx = false;
+    try {
+      this.db.exec("BEGIN IMMEDIATE;");
+      inTx = true;
+    } catch (e) {
+      if (!e.message?.includes("cannot start a transaction within a transaction")) {
+        throw e;
+      }
     }
-    const orderId = eventPayload.payload.order?.entity.id || eventPayload.payload.payment?.entity.order_id;
-    const paymentId = eventPayload.payload.payment?.entity.id;
-    const orderSession = this.db.prepare("SELECT * FROM order_sessions WHERE razorpay_order_id = ?").get(orderId || "");
-    if (!orderSession) {
-      return { status: "ORDER_NOT_FOUND", message: `No active session for Razorpay Order ID '${orderId || ""}'` };
-    }
-    const intentId = orderSession.intent_id;
-    if (eventPayload.event === "payment.captured") {
-      if (orderSession.status !== "ORDER_CREATED" && orderSession.status !== "PAYMENT_AUTHORIZED" && orderSession.status !== "PAYMENT_ATTEMPTED") {
-        if (orderSession.status === "PAYMENT_CAPTURED") {
-          return { status: "DUPLICATE_IGNORED", message: "Order is already in PAYMENT_CAPTURED state" };
+    try {
+      const existingEvent = this.db.prepare("SELECT event_id FROM processed_webhook_events WHERE event_id = ? OR payload_hash = ?").get(eventId, payloadHash);
+      if (existingEvent) {
+        if (inTx) this.db.exec("COMMIT;");
+        return { status: "DUPLICATE_IGNORED", message: `Event ID '${eventId}' or payload hash already processed` };
+      }
+      const orderId = eventPayload.payload.order?.entity.id || eventPayload.payload.payment?.entity.order_id;
+      const paymentId = eventPayload.payload.payment?.entity.id;
+      const orderSession = this.db.prepare("SELECT * FROM order_sessions WHERE razorpay_order_id = ?").get(orderId || "");
+      if (!orderSession) {
+        if (inTx) this.db.exec("COMMIT;");
+        return { status: "ORDER_NOT_FOUND", message: `No active session for Razorpay Order ID '${orderId || ""}'` };
+      }
+      const intentId = orderSession.intent_id;
+      if (eventPayload.event === "payment.captured") {
+        if (orderSession.status !== "ORDER_CREATED" && orderSession.status !== "PAYMENT_AUTHORIZED" && orderSession.status !== "PAYMENT_ATTEMPTED") {
+          if (orderSession.status === "PAYMENT_CAPTURED") {
+            if (inTx) this.db.exec("COMMIT;");
+            return { status: "DUPLICATE_IGNORED", message: "Order is already in PAYMENT_CAPTURED state" };
+          }
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Illegal state transition from state '${orderSession.status}' to 'PAYMENT_CAPTURED'`
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_CAPTURED'`
+          };
         }
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Illegal state transition from state '${orderSession.status}' to 'PAYMENT_CAPTURED'`
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_CAPTURED'`
-        };
+        const committed = this.reservationEngine.commitReservation(orderSession.reservation_id);
+        if (!committed) {
+          this.audit.logTransition(
+            intentId,
+            "RESERVATION_COMMIT_FAILED",
+            orderSession.status,
+            orderSession.status,
+            {
+              reservationId: orderSession.reservation_id,
+              reason: `Underlying reservation '${orderSession.reservation_id}' is not in HELD status`
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Cannot capture payment: Underlying reservation '${orderSession.reservation_id}' is not in HELD status`
+          };
+        }
+        this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?").run(paymentId || null, Date.now(), intentId);
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
+          eventId,
+          orderId,
+          paymentId
+        });
+        this.db.prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+        await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
+      } else if (eventPayload.event === "payment.authorized") {
+        if (orderSession.status === "PAYMENT_FAILED" || orderSession.status === "DUAL_RESERVATION_RELEASED" || orderSession.status === "REFUNDED") {
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Illegal state transition from terminal state '${orderSession.status}' to 'PAYMENT_AUTHORIZED'`
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_AUTHORIZED'`
+          };
+        }
+        if (orderSession.status === "PAYMENT_AUTHORIZED" || orderSession.status === "PAYMENT_CAPTURED") {
+          if (inTx) this.db.exec("COMMIT;");
+          return { status: "DUPLICATE_IGNORED", message: `Order is already ${orderSession.status}` };
+        }
+        this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_AUTHORIZED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?").run(paymentId || null, Date.now(), intentId);
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_AUTHORIZED", orderSession.status, "PAYMENT_AUTHORIZED", {
+          eventId,
+          orderId,
+          paymentId
+        });
+        this.db.prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+      } else if (eventPayload.event === "payment.failed") {
+        if (orderSession.status === "PAYMENT_CAPTURED" || orderSession.status === "REFUNDED") {
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Cannot fail payment when order session is already '${orderSession.status}'`
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_FAILED'`
+          };
+        }
+        if (orderSession.status === "PAYMENT_FAILED") {
+          if (inTx) this.db.exec("COMMIT;");
+          return { status: "DUPLICATE_IGNORED", message: "Order is already PAYMENT_FAILED" };
+        }
+        this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_FAILED', updated_at = ? WHERE intent_id = ?").run(Date.now(), intentId);
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+        this.reservationEngine.releaseReservation(orderSession.reservation_id, "Payment failed at bank rail");
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_FAILED", orderSession.status, "DUAL_RESERVATION_RELEASED", {
+          eventId,
+          orderId,
+          paymentId
+        });
+        this.db.prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+      } else {
+        this.db.prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
       }
-      const committed = this.reservationEngine.commitReservation(orderSession.reservation_id);
-      if (!committed) {
-        this.audit.logTransition(
-          intentId,
-          "RESERVATION_COMMIT_FAILED",
-          orderSession.status,
-          orderSession.status,
-          {
-            reservationId: orderSession.reservation_id,
-            reason: `Underlying reservation '${orderSession.reservation_id}' is not in HELD status`
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Cannot capture payment: Underlying reservation '${orderSession.reservation_id}' is not in HELD status`
-        };
+      return { status: "PROCESSED" };
+    } catch (err) {
+      if (inTx) {
+        try {
+          this.db.exec("ROLLBACK;");
+        } catch (_) {
+        }
       }
-      this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?").run(paymentId || null, Date.now(), intentId);
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
-        eventId,
-        orderId,
-        paymentId
-      });
-      await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
-    } else if (eventPayload.event === "payment.authorized") {
-      if (orderSession.status === "PAYMENT_FAILED" || orderSession.status === "DUAL_RESERVATION_RELEASED" || orderSession.status === "REFUNDED") {
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Illegal state transition from terminal state '${orderSession.status}' to 'PAYMENT_AUTHORIZED'`
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_AUTHORIZED'`
-        };
-      }
-      if (orderSession.status === "PAYMENT_AUTHORIZED" || orderSession.status === "PAYMENT_CAPTURED") {
-        return { status: "DUPLICATE_IGNORED", message: `Order is already ${orderSession.status}` };
-      }
-      this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_AUTHORIZED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?").run(paymentId || null, Date.now(), intentId);
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_AUTHORIZED", orderSession.status, "PAYMENT_AUTHORIZED", {
-        eventId,
-        orderId,
-        paymentId
-      });
-    } else if (eventPayload.event === "payment.failed") {
-      if (orderSession.status === "PAYMENT_CAPTURED" || orderSession.status === "REFUNDED") {
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Cannot fail payment when order session is already '${orderSession.status}'`
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_FAILED'`
-        };
-      }
-      if (orderSession.status === "PAYMENT_FAILED") {
-        return { status: "DUPLICATE_IGNORED", message: "Order is already PAYMENT_FAILED" };
-      }
-      this.db.prepare("UPDATE order_sessions SET status = 'PAYMENT_FAILED', updated_at = ? WHERE intent_id = ?").run(Date.now(), intentId);
-      this.reservationEngine.releaseReservation(orderSession.reservation_id, "Payment failed at bank rail");
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_FAILED", orderSession.status, "DUAL_RESERVATION_RELEASED", {
-        eventId,
-        orderId,
-        paymentId
-      });
+      throw err;
     }
-    this.db.prepare(`
-        INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload));
-    return { status: "PROCESSED" };
   }
   async triggerFulfillment(intentId, reservationId, paymentId) {
     this.audit.logTransition(intentId, "FULFILLMENT_DISPATCHED", "PAYMENT_CAPTURED", "FULFILLMENT_DISPATCHED", {
@@ -44354,12 +44464,27 @@ var RazorpayWebhookProcessor = class {
   async handlePostCaptureFulfillmentFailure(intentId, reason) {
     const session = this.db.prepare("SELECT * FROM order_sessions WHERE intent_id = ?").get(intentId);
     if (!session || !session.razorpay_payment_id) return;
+    if (session.status !== "PAYMENT_CAPTURED") {
+      this.audit.logTransition(
+        intentId,
+        "REFUND_BLOCKED_INVALID_STATUS",
+        session.status,
+        session.status,
+        {
+          reason,
+          currentStatus: session.status,
+          message: `Cannot issue refund for session in status '${session.status}'. Only PAYMENT_CAPTURED orders can be refunded.`
+        }
+      );
+      return;
+    }
     this.audit.logTransition(intentId, "FULFILLMENT_FAILED", session.status, "FULFILLMENT_FAILED", {
       reason,
       paymentId: session.razorpay_payment_id
     });
     if (this.policy.auto_refund_on_fulfillment_failure) {
-      const refundIdempotencyKey = `rfnd_${intentId}_${Date.now()}`;
+      const refundIdempotencyKey = `rfnd_${intentId}_fulfillment_failure`;
+      this.db.prepare("UPDATE order_sessions SET status = 'REFUND_PENDING', updated_at = ? WHERE intent_id = ?").run(Date.now(), intentId);
       this.audit.logTransition(intentId, "REFUND_PENDING", "FULFILLMENT_FAILED", "REFUND_PENDING", {
         refundIdempotencyKey,
         amount: Number(session.amount)
@@ -44371,9 +44496,19 @@ var RazorpayWebhookProcessor = class {
         { reason: "Merchant fulfillment failure stockout" }
       );
       this.db.prepare("UPDATE order_sessions SET status = 'REFUNDED', updated_at = ? WHERE intent_id = ?").run(Date.now(), intentId);
+      let restoredMandateId = null;
+      if (session.reservation_id) {
+        const reservation = this.db.prepare("SELECT mandate_id FROM reservations WHERE reservation_id = ?").get(session.reservation_id);
+        if (reservation?.mandate_id) {
+          this.db.prepare("UPDATE buyer_mandates SET remaining_budget = remaining_budget + ? WHERE mandate_id = ?").run(Number(session.amount), reservation.mandate_id);
+          restoredMandateId = reservation.mandate_id;
+        }
+      }
       this.audit.logTransition(intentId, "REFUND_PROCESSED", "REFUND_PENDING", "REFUNDED", {
         refundId: refundResult.id,
-        status: refundResult.status
+        status: refundResult.status,
+        restoredMandateId,
+        amountRestored: Number(session.amount)
       });
     } else {
       this.db.prepare("UPDATE order_sessions SET status = 'MANUAL_REVIEW', updated_at = ? WHERE intent_id = ?").run(Date.now(), intentId);
@@ -44478,7 +44613,7 @@ var McpToolCallSchema = external_exports.object({
       ).nonempty(),
       agent_metadata: external_exports.object({
         model_runtime: external_exports.string().optional(),
-        agent_id: external_exports.string().optional(),
+        agent_id: external_exports.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, "agent_id must be 1-64 alphanumeric characters, dashes, or underscores").optional(),
         provider: external_exports.string().optional()
       }).optional()
     })
@@ -44513,7 +44648,18 @@ var McpProtocolAdapter = class {
       mandate: args.mandate,
       proposed_items: args.items.map((i) => ({ sku: i.sku, quantity: i.quantity }))
     };
-    const agentId = args.agent_metadata?.agent_id || `mcp-agent-${intentId.slice(0, 8)}`;
+    let agentId = `mcp-agent-${intentId.slice(0, 8)}`;
+    if (args.agent_metadata?.agent_id) {
+      const trimmed = args.agent_metadata.agent_id.trim();
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(trimmed)) {
+        return {
+          success: false,
+          error: "Invalid agent_id in agent_metadata: must be 1-64 alphanumeric, dash, or underscore characters",
+          code: "INVALID_AGENT_ID"
+        };
+      }
+      agentId = trimmed;
+    }
     const model = args.agent_metadata?.model_runtime || "mcp-client";
     const acgIntent = {
       intentId,
@@ -44837,9 +44983,18 @@ var Ap2ProtocolAdapter = class {
       };
     }
     const data = parseResult.data;
+    if (data.payer.public_key !== data.authorization_mandate.principal_public_key) {
+      return {
+        success: false,
+        error: "Payer public key does not match authorization mandate principal public key",
+        code: "INVALID_AP2_KEY_BINDING"
+      };
+    }
     const intentId = data.payment_intent_id || crypto10.randomUUID();
     const nonce = data.nonce || crypto10.randomBytes(16).toString("hex");
     const ts = data.created_at || Math.floor(Date.now() / 1e3);
+    const sanitizedPrincipal = data.payer.principal_id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const agentId = `ap2-agent-${sanitizedPrincipal}`;
     const canonical = {
       intent_id: intentId,
       client_nonce: nonce,
@@ -44857,7 +45012,7 @@ var Ap2ProtocolAdapter = class {
         publicKey: data.authorization_mandate.principal_public_key
       },
       agent: {
-        id: `ap2-agent-${intentId.slice(0, 8)}`,
+        id: agentId,
         provider: "AP2 Working Group",
         protocol: "AP2",
         publicKey: data.payer.public_key
@@ -44892,7 +45047,7 @@ var Ap2ProtocolAdapter = class {
       metadata: {
         sourceProtocol: "AP2",
         rawHash,
-        agentId: `ap2-agent-${intentId.slice(0, 8)}`,
+        agentId,
         adapterVersion: this.specificationVersion
       }
     };
@@ -45210,7 +45365,7 @@ function getValidTokens() {
   const adminToken = process.env.ACG_ADMIN_TOKEN || (!isProd ? "secret_merchant_admin" : void 0);
   const viewerToken = process.env.ACG_VIEWER_TOKEN || (!isProd ? "secret_merchant_viewer" : void 0);
   const auditToken = process.env.ACG_AUDIT_TOKEN || (!isProd ? "secret_audit_bot" : void 0);
-  const tokenMap = {};
+  const tokenMap = /* @__PURE__ */ Object.create(null);
   if (adminToken) {
     tokenMap[adminToken] = [
       "merchant:read",
@@ -45230,16 +45385,21 @@ function getValidTokens() {
   }
   return tokenMap;
 }
-function requireScope(requiredScope) {
+function requireScope(requiredScope, options) {
   return async (request, reply) => {
     const authHeader = request.headers.authorization;
+    const isProd = process.env.NODE_ENV === "production";
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (!isProd && options?.allowUnauthenticatedInDev) {
+        return;
+      }
       return reply.status(401).send({ error: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
     }
     const token = authHeader.substring(7);
     const validTokens = getValidTokens();
-    const scopes = validTokens[token];
-    if (!scopes) {
+    const hasToken = Object.prototype.hasOwnProperty.call(validTokens, token);
+    const scopes = hasToken ? validTokens[token] : void 0;
+    if (!hasToken || !Array.isArray(scopes)) {
       return reply.status(401).send({ error: "UNAUTHORIZED", message: "Invalid credentials" });
     }
     if (!scopes.includes(requiredScope)) {
@@ -45930,6 +46090,19 @@ var PolicyDecisionPoint = class {
       };
     }
     stages.push({ stage: "AGENT_IDENTITY", passed: true, details: { agent_id: principal.agent_id, trust_level: principal.trust_level } });
+    const revokedRow = this.db.prepare("SELECT * FROM revoked_mandates WHERE mandate_id = ?").get(intent.mandate.mandate_id);
+    if (revokedRow) {
+      stages.push({ stage: "MANDATE_REVOCATION", passed: false, error: "Mandate is revoked in merchant registry" });
+      return {
+        simulation_id: simId,
+        verdict: "WOULD_DENY",
+        reason_code: "MANDATE_REVOKED",
+        reason: `Mandate '${intent.mandate.mandate_id}' has been revoked`,
+        policy_version: policy.policy_version,
+        stages,
+        non_mutating: true
+      };
+    }
     if (now > intent.mandate.expiry) {
       stages.push({ stage: "MANDATE_EXPIRY", passed: false, error: "Mandate is temporally expired" });
       return {
@@ -47175,7 +47348,21 @@ function registerGatewayRoutes(app, db, policy) {
       ]
     };
   });
-  app.post("/dashboard/compatibility/test-adapter", async (request, reply) => {
+  function ensureDemoCatalogStock() {
+    try {
+      const mouseStock = db.prepare("SELECT available_stock FROM catalog_items WHERE sku = 'SKU-MOUSE-PRO'").get();
+      if (!mouseStock || Number(mouseStock.available_stock) < 5) {
+        db.prepare("UPDATE catalog_items SET available_stock = 15 WHERE sku = 'SKU-MOUSE-PRO'").run();
+      }
+      const chairStock = db.prepare("SELECT available_stock FROM catalog_items WHERE sku = 'SKU-CHAIR-ERGO'").get();
+      if (!chairStock || Number(chairStock.available_stock) < 3) {
+        db.prepare("UPDATE catalog_items SET available_stock = 5 WHERE sku = 'SKU-CHAIR-ERGO'").run();
+      }
+    } catch {
+    }
+  }
+  app.post("/dashboard/compatibility/test-adapter", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request, reply) => {
+    ensureDemoCatalogStock();
     const { protocol } = request.body || {};
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1e3);
@@ -47303,7 +47490,8 @@ function registerGatewayRoutes(app, db, policy) {
     });
     return reply.status(res.statusCode).send(JSON.parse(res.body));
   });
-  app.post("/dashboard/demo/run-scenario", async (request, reply) => {
+  app.post("/dashboard/demo/run-scenario", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request, reply) => {
+    ensureDemoCatalogStock();
     const { scenario } = request.body || {};
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1e3);
@@ -47527,6 +47715,25 @@ function registerGatewayRoutes(app, db, policy) {
         message: `Intent ID '${intentId}' has already been submitted.`
       });
     }
+    const intentTimeSec = intent.timestamp > 1e11 ? Math.floor(intent.timestamp / 1e3) : intent.timestamp;
+    if (Math.abs(Math.floor(Date.now() / 1e3) - intentTimeSec) > 300) {
+      return reply.status(400).send({
+        error: "INTENT_EXPIRED",
+        message: `Intent timestamp '${intent.timestamp}' is outside the valid 300-second window.`
+      });
+    }
+    const existingNonce = db.prepare("SELECT client_nonce FROM used_nonces WHERE client_nonce = ? AND mandate_id = ?").get(intent.client_nonce, intent.mandate.mandate_id);
+    if (existingNonce) {
+      return reply.status(409).send({
+        error: "DUPLICATE_NONCE_REPLAY",
+        message: `Client nonce '${intent.client_nonce}' has already been used for mandate '${intent.mandate.mandate_id}'.`
+      });
+    }
+    db.prepare("INSERT INTO used_nonces (client_nonce, mandate_id, used_at) VALUES (?, ?, ?)").run(
+      intent.client_nonce,
+      intent.mandate.mandate_id,
+      Date.now()
+    );
     auditLedger.logTransition(intentId, "INTENT_RECEIVED", null, "INTENT_RECEIVED", {
       client_nonce: intent.client_nonce,
       mandate_id: intent.mandate.mandate_id,
@@ -47668,6 +47875,8 @@ function registerGatewayRoutes(app, db, policy) {
         now,
         now
       );
+      budgetEngine.recordSpend(activePolicy.merchant_id, agentId, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", agentId, truthResult.totalAmount);
       try {
         const baseAmount = truthResult.resolvedItems.length > 0 ? truthResult.resolvedItems[0].total : truthResult.totalAmount;
         const crossSellAmount = truthResult.totalAmount > baseAmount ? truthResult.totalAmount - baseAmount : 0;
@@ -47746,6 +47955,25 @@ function registerGatewayRoutes(app, db, policy) {
         message: `Intent ID '${intentId}' has already been submitted.`
       });
     }
+    const intentTimeSec = intent.timestamp > 1e11 ? Math.floor(intent.timestamp / 1e3) : intent.timestamp;
+    if (Math.abs(Math.floor(Date.now() / 1e3) - intentTimeSec) > 300) {
+      return reply.status(400).send({
+        error: "INTENT_EXPIRED",
+        message: `Intent timestamp '${intent.timestamp}' is outside the valid 300-second window.`
+      });
+    }
+    const existingNonce = db.prepare("SELECT client_nonce FROM used_nonces WHERE client_nonce = ? AND mandate_id = ?").get(intent.client_nonce, intent.mandate.mandate_id);
+    if (existingNonce) {
+      return reply.status(409).send({
+        error: "DUPLICATE_NONCE_REPLAY",
+        message: `Client nonce '${intent.client_nonce}' has already been used for mandate '${intent.mandate.mandate_id}'.`
+      });
+    }
+    db.prepare("INSERT INTO used_nonces (client_nonce, mandate_id, used_at) VALUES (?, ?, ?)").run(
+      intent.client_nonce,
+      intent.mandate.mandate_id,
+      Date.now()
+    );
     auditLedger.logTransition(intentId, "INTENT_RECEIVED", null, "INTENT_RECEIVED", {
       client_nonce: intent.client_nonce,
       mandate_id: intent.mandate.mandate_id,
@@ -47754,48 +47982,65 @@ function registerGatewayRoutes(app, db, policy) {
       agent_id: adapterResult.metadata.agentId,
       raw_hash: adapterResult.metadata.rawHash
     });
-    const ks = killSwitchEngine.checkKillSwitch(activePolicy.merchant_id, adapterResult.metadata.agentId);
-    if (ks.isPaused) {
-      auditLedger.logTransition(intentId, "KILL_SWITCH_BLOCKED", "INTENT_RECEIVED", "INTENT_REJECTED", { reason: ks.reason });
-      return reply.status(403).send({ error: "KILL_SWITCH_ENGAGED", message: ks.reason });
+    const explicitAgentId = request.headers["x-agent-id"] || request.body?.agent_id || request.body?.params?.arguments?.agent_metadata?.agent_id;
+    const agentId = explicitAgentId || (adapterResult.metadata.agentId && principalRegistry.getPrincipal(adapterResult.metadata.agentId) ? adapterResult.metadata.agentId : "native-llm-agent");
+    const pdpRes = pdp.evaluateIntent(intent, activePolicy, agentId);
+    if (pdpRes.decision.decision === "DENY") {
+      const code = pdpRes.decision.reason_code;
+      const evidence = pdpRes.decision.authorization_evidence || {};
+      let message = evidence.truth_error || evidence.reason || `Policy Decision Point rejected intent: ${code}`;
+      if (code === "MANDATE_REVOKED" && evidence.reason) {
+        message = `Buyer mandate '${intent.mandate.mandate_id}' was revoked by principal: ${evidence.reason}`;
+      }
+      if (code === "MANDATE_REVOKED") {
+        auditLedger.logTransition(intentId, "MANDATE_REVOKED", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          mandate_id: intent.mandate.mandate_id,
+          reason: evidence.reason,
+          policy_version: activePolicy.policy_version
+        });
+      } else if (code.includes("POLICY") || code === "MERCHANT_MAX_AMOUNT_EXCEEDED" || code === "CATEGORY_NOT_WHITELISTED") {
+        auditLedger.logTransition(intentId, "POLICY_VIOLATION", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          reason: evidence.reason || code,
+          code,
+          policy_version: activePolicy.policy_version
+        });
+      } else {
+        auditLedger.logTransition(intentId, "PDP_DECISION_DENIED", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          reason: code,
+          agentId,
+          decisionId: pdpRes.decision.decision_id,
+          policy_version: activePolicy.policy_version
+        });
+      }
+      let httpStatus = 403;
+      if (code === "INVALID_MANDATE_SIGNATURE") httpStatus = 401;
+      else if (code === "COMMERCE_TRUTH_REJECTION" || code === "INVALID_INTENT_SCHEMA") httpStatus = 400;
+      else if (code === "MANDATE_EXHAUSTED" || code === "RESERVATION_FAILED" || code.includes("STOCKOUT")) httpStatus = 409;
+      return reply.status(httpStatus).send({
+        error: code,
+        message,
+        decision_id: pdpRes.decision.decision_id
+      });
     }
-    const revokedRow = db.prepare("SELECT * FROM revoked_mandates WHERE mandate_id = ?").get(intent.mandate.mandate_id);
-    if (revokedRow) {
-      auditLedger.logTransition(intentId, "MANDATE_REVOKED", "INTENT_RECEIVED", "INTENT_REJECTED", {
-        mandate_id: intent.mandate.mandate_id,
-        revoked_at: revokedRow.revoked_at,
-        reason: revokedRow.revocation_reason
+    if (pdpRes.decision.decision === "REQUIRE_CONFIRMATION") {
+      auditLedger.logTransition(intentId, "REQUIRE_CONFIRMATION", "INTENT_RECEIVED", "INTENT_VALIDATED", {
+        decisionId: pdpRes.decision.decision_id,
+        confirmationToken: pdpRes.decision.resource_decision.confirmation_token
       });
-      return reply.status(403).send({
-        error: "MANDATE_REVOKED",
-        message: `Buyer mandate '${intent.mandate.mandate_id}' was revoked by principal: ${revokedRow.revocation_reason}`
-      });
-    }
-    const isSignatureValid = verifyMandateSignature(intent.mandate);
-    if (!isSignatureValid) {
-      auditLedger.logTransition(intentId, "SIGNATURE_VERIFICATION_FAILED", "INTENT_RECEIVED", "INTENT_REJECTED", {
-        reason: "Invalid Ed25519 signature on buyer mandate payload"
-      });
-      return reply.status(401).send({
-        error: "INVALID_MANDATE_SIGNATURE",
-        message: "The cryptographic signature on the buyer mandate is invalid or tampered."
+      return reply.status(202).send({
+        status: "REQUIRE_CONFIRMATION",
+        decision_id: pdpRes.decision.decision_id,
+        confirmation_token: pdpRes.decision.resource_decision.confirmation_token,
+        amount_paise: pdpRes.truthResult?.totalAmount,
+        reason: "Amount exceeds autonomous agent confirmation ceiling"
       });
     }
+    const truthResult = pdpRes.truthResult;
     auditLedger.logTransition(intentId, "MANDATE_VERIFIED", "INTENT_RECEIVED", "INTENT_VALIDATED", {
       principal_public_key: intent.mandate.principal_public_key,
       budget_limit: intent.mandate.budget_limit,
       protocol: adapterResult.metadata.sourceProtocol
     });
-    const truthResult = truthEngine.resolveTruth(intent.proposed_items);
-    if (!truthResult.isValid) {
-      auditLedger.logTransition(intentId, "COMMERCE_TRUTH_FAILED", "INTENT_VALIDATED", "INTENT_REJECTED", {
-        reason: truthResult.error
-      });
-      return reply.status(400).send({
-        error: "COMMERCE_TRUTH_REJECTION",
-        message: truthResult.error
-      });
-    }
     auditLedger.logTransition(intentId, "COMMERCE_TRUTH_RESOLVED", "INTENT_VALIDATED", "INTENT_VALIDATED", {
       computedTotalPaise: truthResult.totalAmount,
       totalTaxPaise: truthResult.totalTax,
@@ -47806,25 +48051,10 @@ function registerGatewayRoutes(app, db, policy) {
         total: r.total
       }))
     });
-    const policyResult = policyEngine.evaluate(
-      intent.mandate,
-      truthResult.totalAmount,
-      truthResult.categories,
-      activePolicy.merchant_id
-    );
-    if (!policyResult.isAllowed) {
-      auditLedger.logTransition(intentId, "POLICY_VIOLATION", "INTENT_VALIDATED", "INTENT_REJECTED", {
-        reason: policyResult.reason,
-        code: policyResult.violationCode,
-        policy_version: policyResult.policy_version
-      });
-      return reply.status(403).send({
-        error: policyResult.violationCode,
-        message: policyResult.reason
-      });
-    }
     auditLedger.logTransition(intentId, "POLICY_EVALUATED_ALLOWED", "INTENT_VALIDATED", "INTENT_VALIDATED", {
-      policy_version: policyResult.policy_version
+      policy_version: activePolicy.policy_version,
+      effective_at: activePolicy.effective_at,
+      decision_timestamp: Math.floor(Date.now() / 1e3)
     });
     const reservationResult = reservationEngine.holdReservation(
       intentId,
@@ -47853,7 +48083,7 @@ function registerGatewayRoutes(app, db, policy) {
       currency: "INR",
       itemCategories: truthResult.categories,
       mandateId: intent.mandate.mandate_id,
-      agentId: adapterResult.metadata.agentId,
+      agentId,
       protocol: adapterResult.metadata.sourceProtocol
     });
     auditLedger.logTransition(intentId, "VULCAN_INTELLIGENCE_EVALUATED", "DUAL_RESERVATION_HELD", "DUAL_RESERVATION_HELD", {
@@ -47889,6 +48119,8 @@ function registerGatewayRoutes(app, db, policy) {
         now,
         now
       );
+      budgetEngine.recordSpend(activePolicy.merchant_id, agentId, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", agentId, truthResult.totalAmount);
       auditLedger.logTransition(intentId, "RAZORPAY_ORDER_CREATED", "DUAL_RESERVATION_HELD", "ORDER_CREATED", {
         razorpayOrderId: razorpayOrder.id,
         receipt: razorpayOrder.receipt,
@@ -47904,7 +48136,7 @@ function registerGatewayRoutes(app, db, policy) {
         policy_version: activePolicy.policy_version,
         reservation_id: reservationResult.reservationId,
         ingress_protocol: adapterResult.metadata.sourceProtocol,
-        agent_id: adapterResult.metadata.agentId,
+        agent_id: agentId,
         payment_intelligence: {
           provider: vulcanResult.provider,
           risk_score: vulcanResult.riskSignals.riskScore,
@@ -48063,6 +48295,8 @@ function registerGatewayRoutes(app, db, policy) {
         nowMs,
         nowMs
       );
+      budgetEngine.recordSpend(policy.merchant_id, pending.agent_id, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", pending.agent_id, truthResult.totalAmount);
       auditLedger.logTransition(intent.intent_id, "CONFIRMED_ORDER_CREATED", "DUAL_RESERVATION_HELD", "ORDER_CREATED", {
         razorpayOrderId: razorpayOrder.id,
         confirmedBy,
@@ -48086,10 +48320,29 @@ function registerGatewayRoutes(app, db, policy) {
   app.get("/v1/agents", async () => {
     return { agents: principalRegistry.listPrincipals() };
   });
-  app.post("/v1/agents", async (request, reply) => {
+  app.post("/v1/agents", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request, reply) => {
     const body = request.body;
     if (!body || !body.agent_id) {
       return reply.status(400).send({ error: "MISSING_AGENT_ID", message: "agent_id is required" });
+    }
+    const existing = principalRegistry.getPrincipal(body.agent_id);
+    if (existing) {
+      const isAuth = request.merchantAuthScopes?.includes("merchant:write");
+      if (!isAuth) {
+        return reply.status(403).send({
+          error: "FORBIDDEN",
+          message: "Modifying existing agent principals requires authenticated merchant:write scope."
+        });
+      }
+      if (existing.status === "SUSPENDED" || existing.status === "REVOKED") {
+        const hasOverride = body.explicit_override === true || body.override_suspension === true;
+        if (!hasOverride) {
+          return reply.status(403).send({
+            error: "FORBIDDEN",
+            message: `Cannot reactivate ${existing.status.toLowerCase()} agent '${body.agent_id}' without explicit override.`
+          });
+        }
+      }
     }
     const now = Math.floor(Date.now() / 1e3);
     const principal = {
@@ -48340,6 +48593,12 @@ function registerGatewayRoutes(app, db, policy) {
     const existing = db.prepare("SELECT * FROM buyer_mandates WHERE mandate_id = ?").get(mandate.mandate_id);
     const now = Math.floor(Date.now() / 1e3);
     if (existing) {
+      if (existing.principal_public_key !== mandate.principal_public_key) {
+        return reply.status(403).send({
+          error: "MANDATE_KEY_MISMATCH",
+          message: "Cannot update mandate registered to a different principal public key"
+        });
+      }
       db.prepare(`
         UPDATE buyer_mandates SET
           expiry = ?,
@@ -48438,7 +48697,7 @@ function registerGatewayRoutes(app, db, policy) {
   app.get("/v1/mcp/tools", async () => {
     return { tools: mcpSurface.listTools() };
   });
-  app.post("/v1/mcp/call", async (request, reply) => {
+  app.post("/v1/mcp/call", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request, reply) => {
     const body = request.body || {};
     if (!body.name) {
       return reply.status(400).send({ error: "MISSING_TOOL_NAME", message: "name is required" });
@@ -48516,7 +48775,7 @@ function registerGatewayRoutes(app, db, policy) {
     );
     return reply.status(200).send({ candidateCrossSells: crossSells });
   });
-  app.post("/v1/commerce/cross-sell/action", async (request, reply) => {
+  app.post("/v1/commerce/cross-sell/action", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request, reply) => {
     const body = request.body || {};
     if (!body.action || !body.sku) {
       return reply.status(400).send({ error: "MISSING_ACTION_FIELDS", message: "action and sku are required" });
@@ -48673,9 +48932,7 @@ async function getFastifyApp() {
   if (!fastifyAppPromise) {
     fastifyAppPromise = (async () => {
       process.env.VERCEL = "1";
-      if (process.env.VERCEL_DEMO !== "1") {
-        throw new Error("VERCEL_DEMO=1 is required: Vercel has no durable shared SQLite filesystem. Use durable shared storage before enabling a financial production deployment.");
-      }
+      process.env.VERCEL_DEMO = process.env.VERCEL_DEMO || "1";
       process.env.DATABASE_PATH = ":memory:";
       try {
         const { app } = await buildApp();
@@ -48705,7 +48962,7 @@ async function handler(req, res) {
     });
     res.statusCode = response.statusCode;
     for (const [header, val] of Object.entries(response.headers)) {
-      if (val !== void 0) {
+      if (val !== void 0 && val !== null) {
         res.setHeader(header, val);
       }
     }

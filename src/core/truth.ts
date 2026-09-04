@@ -115,6 +115,17 @@ export class CommerceTruthEngine {
     const getItemStmt = this.db.prepare("SELECT * FROM catalog_items WHERE sku = ? AND is_active = 1");
 
     for (const proposed of proposedItems) {
+      if (!Number.isInteger(proposed.quantity) || proposed.quantity <= 0) {
+        return {
+          isValid: false,
+          error: `Invalid item quantity for SKU '${proposed.sku}': quantity must be a positive integer`,
+          resolvedItems: [],
+          totalAmount: 0,
+          totalTax: 0,
+          categories: [],
+        };
+      }
+
       const row = getItemStmt.get(proposed.sku) as unknown as CatalogItem | undefined;
 
       if (!row) {

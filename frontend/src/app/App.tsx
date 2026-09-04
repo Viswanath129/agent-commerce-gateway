@@ -136,12 +136,12 @@ export const App: React.FC = () => {
     const interval = setInterval(fetchAllData, 4000);
     return () => clearInterval(interval);
   }, [fetchAllData]);
-
-  // Manual Sync handler
+  // Manual Sync handler
   const handleManualSync = async () => {
     setIsSyncing(true);
     await fetchAllData();
   };
+
 
   // Scenario runner for Screen 02
   const handleRunScenario = async (scenario: DemoScenarioType): Promise<DemoScenarioResult> => {
@@ -153,7 +153,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err.statusCode === 401) {
         setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403) {
+      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
         setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
       }
       throw err;
@@ -174,7 +174,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err.statusCode === 401) {
         setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403) {
+      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
         setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
       }
       throw err;
@@ -205,7 +205,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err.statusCode === 401) {
         setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403) {
+      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
         setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
       }
       throw err;
@@ -227,7 +227,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err.statusCode === 401) {
         setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403) {
+      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
         setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
       }
       throw err;
@@ -246,7 +246,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       if (err.statusCode === 401) {
         setAuthError({ status: 401, message: err.message || 'Authentication required' });
-      } else if (err.statusCode === 403) {
+      } else if (err.statusCode === 403 && (err.errorCode === 'FORBIDDEN' || err.details?.error === 'FORBIDDEN' || err.message?.includes('Insufficient permissions'))) {
         setAuthError({ status: 403, message: 'Insufficient merchant scope.' });
       }
       throw err;

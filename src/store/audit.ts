@@ -19,39 +19,60 @@ export class AuditLedger {
     newState: TransactionState,
     details: Record<string, unknown>
   ): AuditRecord {
-    // 1. Fetch latest record hash for chaining using rowid (exact FIFO insertion order)
-    const lastRow = this.db
-      .prepare("SELECT record_hash FROM audit_ledger ORDER BY rowid DESC LIMIT 1")
-      .get() as { record_hash?: string } | undefined;
+    let inTx = false;
+    try {
+      this.db.exec("BEGIN IMMEDIATE;");
+      inTx = true;
+    } catch (e: any) {
+      if (!e.message?.includes("cannot start a transaction within a transaction")) {
+        throw e;
+      }
+    }
 
-    const prevHash = lastRow?.record_hash || "GENESIS_BLOCK_0000000000000000";
-    const timestamp = Date.now();
-    const auditId = `audit_${crypto.randomUUID()}`;
-    const detailsJson = JSON.stringify(details);
+    try {
+      // 1. Fetch latest record hash for chaining using rowid (exact FIFO insertion order)
+      const lastRow = this.db
+        .prepare("SELECT record_hash FROM audit_ledger ORDER BY rowid DESC LIMIT 1")
+        .get() as { record_hash?: string } | undefined;
 
-    // 2. Compute SHA-256 Hash over block contents + previous hash
-    const blockPayload = `${auditId}|${intentId}|${timestamp}|${eventType}|${prevState || "NULL"}|${newState}|${detailsJson}|${prevHash}`;
-    const recordHash = crypto.createHash("sha256").update(blockPayload).digest("hex");
+      const prevHash = lastRow?.record_hash || "GENESIS_BLOCK_0000000000000000";
+      const timestamp = Date.now();
+      const auditId = `audit_${crypto.randomUUID()}`;
+      const detailsJson = JSON.stringify(details);
 
-    // 3. Insert atomically into DB
-    this.db
-      .prepare(`
-        INSERT INTO audit_ledger (
-          audit_id, intent_id, timestamp, event_type, previous_state, new_state, details_json, record_hash, previous_record_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(auditId, intentId, timestamp, eventType, prevState, newState, detailsJson, recordHash, prevHash);
+      // 2. Compute SHA-256 Hash over block contents + previous hash
+      const blockPayload = `${auditId}|${intentId}|${timestamp}|${eventType}|${prevState || "NULL"}|${newState}|${detailsJson}|${prevHash}`;
+      const recordHash = crypto.createHash("sha256").update(blockPayload).digest("hex");
 
-    return {
-      audit_id: auditId,
-      intent_id: intentId,
-      timestamp,
-      event_type: eventType,
-      previous_state: prevState,
-      new_state: newState,
-      details,
-      record_hash: recordHash,
-    };
+      // 3. Insert atomically into DB
+      this.db
+        .prepare(`
+          INSERT INTO audit_ledger (
+            audit_id, intent_id, timestamp, event_type, previous_state, new_state, details_json, record_hash, previous_record_hash
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(auditId, intentId, timestamp, eventType, prevState, newState, detailsJson, recordHash, prevHash);
+
+      if (inTx) {
+        this.db.exec("COMMIT;");
+      }
+
+      return {
+        audit_id: auditId,
+        intent_id: intentId,
+        timestamp,
+        event_type: eventType,
+        previous_state: prevState,
+        new_state: newState,
+        details,
+        record_hash: recordHash,
+      };
+    } catch (err) {
+      if (inTx) {
+        this.db.exec("ROLLBACK;");
+      }
+      throw err;
+    }
   }
 
   /**

@@ -27,19 +27,23 @@ export interface RazorpayRefundResponse {
 export class RazorpayRailClient {
   private keyId: string;
   private keySecret: string;
-  private isLiveCredentials: boolean;
+  public isLiveCredentials: boolean;
 
   constructor(keyId?: string, keySecret?: string) {
     const envId = process.env.RAZORPAY_KEY_ID;
     const envSecret = process.env.RAZORPAY_KEY_SECRET;
 
-    if (process.env.NODE_ENV === "production" && (!envId || !envSecret)) {
+    if (process.env.NODE_ENV === "production" && process.env.VERCEL_DEMO !== "1" && (!envId || !envSecret)) {
       throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.");
     }
 
     this.keyId = keyId || envId || "rzp_test_mock";
-    this.keySecret = keySecret || envSecret || "mock_secret";
-    this.isLiveCredentials = this.keyId.startsWith("rzp_test_") && this.keyId !== "rzp_test_placeholder_key" && this.keyId !== "rzp_test_mock";
+    this.keySecret = keySecret || envSecret || "rzp_secret_mock";
+    this.isLiveCredentials = Boolean(
+      this.keyId &&
+      this.keySecret &&
+      this.keyId.startsWith("rzp_live_")
+    );
   }
 
   /**

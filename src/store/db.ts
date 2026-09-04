@@ -62,6 +62,11 @@ export function initDatabase(dbPath: string = "./data/acg_gateway.db"): any {
   // Enable foreign keys
   db.exec("PRAGMA foreign_keys = ON;");
 
+  if (dbPath !== ":memory:") {
+    db.exec("PRAGMA journal_mode = WAL;");
+  }
+  db.exec("PRAGMA busy_timeout = 5000;");
+
   // Run initial schema migrations
   db.exec(`
     -- 1. Merchant Catalog Truth Table
@@ -303,6 +308,15 @@ export function initDatabase(dbPath: string = "./data/acg_gateway.db"): any {
       metadata_json TEXT,
       created_at INTEGER NOT NULL
     );
+
+    -- 19. Replay Prevention: Used Nonces Table
+    CREATE TABLE IF NOT EXISTS used_nonces (
+      client_nonce TEXT NOT NULL,
+      mandate_id TEXT NOT NULL,
+      used_at INTEGER NOT NULL,
+      PRIMARY KEY (client_nonce, mandate_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_used_nonces_used_at ON used_nonces(used_at);
   `);
 
   return db;

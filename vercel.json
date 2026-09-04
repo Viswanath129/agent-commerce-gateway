@@ -1,6 +1,5 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/v1/(.*)",

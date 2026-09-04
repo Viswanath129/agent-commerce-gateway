@@ -36,6 +36,14 @@ export class RazorpayWebhookProcessor {
     if (process.env.NODE_ENV === "production" && this.webhookSecret === "rzp_webhook_secret_test" && !envSecret) {
        throw new Error("RAZORPAY_WEBHOOK_SECRET is required. No fallback secrets are permitted in production.");
     }
+
+    // Ensure payload_hash column and index exist in processed_webhook_events (RF-08)
+    try {
+      this.db.exec("ALTER TABLE processed_webhook_events ADD COLUMN payload_hash TEXT;");
+    } catch {}
+    try {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_webhook_payload_hash ON processed_webhook_events(payload_hash);");
+    } catch {}
   }
 
   /**
@@ -89,182 +97,254 @@ export class RazorpayWebhookProcessor {
       };
     }
   ): Promise<{ status: "PROCESSED" | "DUPLICATE_IGNORED" | "ORDER_NOT_FOUND" | "ERROR"; message?: string }> {
-    // 1. DEDUPLICATION: Check if event_id has already been processed
-    const existingEvent = this.db
-      .prepare("SELECT event_id FROM processed_webhook_events WHERE event_id = ?")
-      .get(eventId);
+    const payloadHash = crypto.createHash("sha256").update(JSON.stringify(eventPayload)).digest("hex");
 
-    if (existingEvent) {
-      return { status: "DUPLICATE_IGNORED", message: `Event ID '${eventId}' already processed` };
+    let inTx = false;
+    try {
+      this.db.exec("BEGIN IMMEDIATE;");
+      inTx = true;
+    } catch (e: any) {
+      if (!e.message?.includes("cannot start a transaction within a transaction")) {
+        throw e;
+      }
     }
 
-    const orderId = eventPayload.payload.order?.entity.id || eventPayload.payload.payment?.entity.order_id;
-    const paymentId = eventPayload.payload.payment?.entity.id;
+    try {
+      // 1. DEDUPLICATION: Check if event_id OR payload_hash has already been processed (RF-08)
+      const existingEvent = this.db
+        .prepare("SELECT event_id FROM processed_webhook_events WHERE event_id = ? OR payload_hash = ?")
+        .get(eventId, payloadHash);
 
-    // 2. Find Order Session in Database
-    const orderSession = this.db
-      .prepare("SELECT * FROM order_sessions WHERE razorpay_order_id = ?")
-      .get(orderId || "") as unknown as {
-        intent_id: string;
-        receipt: string;
-        razorpay_order_id: string;
-        razorpay_payment_id: string | null;
-        amount: number | bigint;
-        status: TransactionState;
-        reservation_id: string;
-      } | undefined;
+      if (existingEvent) {
+        if (inTx) this.db.exec("COMMIT;");
+        return { status: "DUPLICATE_IGNORED", message: `Event ID '${eventId}' or payload hash already processed` };
+      }
 
-    if (!orderSession) {
-      return { status: "ORDER_NOT_FOUND", message: `No active session for Razorpay Order ID '${orderId || ""}'` };
-    }
+      const orderId = eventPayload.payload.order?.entity.id || eventPayload.payload.payment?.entity.order_id;
+      const paymentId = eventPayload.payload.payment?.entity.id;
 
-    const intentId = orderSession.intent_id;
+      // 2. Find Order Session in Database
+      const orderSession = this.db
+        .prepare("SELECT * FROM order_sessions WHERE razorpay_order_id = ?")
+        .get(orderId || "") as unknown as {
+          intent_id: string;
+          receipt: string;
+          razorpay_order_id: string;
+          razorpay_payment_id: string | null;
+          amount: number | bigint;
+          status: TransactionState;
+          reservation_id: string;
+        } | undefined;
 
-    // 3. Strict State Machine Validation: Prevent illegal transitions from terminal or failed states
-    if (eventPayload.event === "payment.captured") {
-      if (
-        orderSession.status !== "ORDER_CREATED" &&
-        orderSession.status !== "PAYMENT_AUTHORIZED" &&
-        orderSession.status !== "PAYMENT_ATTEMPTED"
-      ) {
-        if (orderSession.status === "PAYMENT_CAPTURED") {
-          return { status: "DUPLICATE_IGNORED", message: "Order is already in PAYMENT_CAPTURED state" };
+      if (!orderSession) {
+        if (inTx) this.db.exec("COMMIT;");
+        return { status: "ORDER_NOT_FOUND", message: `No active session for Razorpay Order ID '${orderId || ""}'` };
+      }
+
+      const intentId = orderSession.intent_id;
+
+      // 3. Strict State Machine Validation: Prevent illegal transitions from terminal or failed states
+      if (eventPayload.event === "payment.captured") {
+        if (
+          orderSession.status !== "ORDER_CREATED" &&
+          orderSession.status !== "PAYMENT_AUTHORIZED" &&
+          orderSession.status !== "PAYMENT_ATTEMPTED"
+        ) {
+          if (orderSession.status === "PAYMENT_CAPTURED") {
+            if (inTx) this.db.exec("COMMIT;");
+            return { status: "DUPLICATE_IGNORED", message: "Order is already in PAYMENT_CAPTURED state" };
+          }
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Illegal state transition from state '${orderSession.status}' to 'PAYMENT_CAPTURED'`,
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_CAPTURED'`,
+          };
         }
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Illegal state transition from state '${orderSession.status}' to 'PAYMENT_CAPTURED'`,
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_CAPTURED'`,
-        };
+
+        // Invariant: Verify underlying reservation is still HELD and commit it
+        const committed = this.reservationEngine.commitReservation(orderSession.reservation_id);
+        if (!committed) {
+          this.audit.logTransition(
+            intentId,
+            "RESERVATION_COMMIT_FAILED",
+            orderSession.status,
+            orderSession.status,
+            {
+              reservationId: orderSession.reservation_id,
+              reason: `Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Cannot capture payment: Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
+          };
+        }
+
+        // Valid transition from ORDER_CREATED or PAYMENT_AUTHORIZED with committed reservation
+        this.db
+          .prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
+          .run(paymentId || null, Date.now(), intentId);
+
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
+          eventId,
+          orderId,
+          paymentId,
+        });
+
+        this.db
+          .prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+
+        await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
+      } else if (eventPayload.event === "payment.authorized") {
+        if (
+          orderSession.status === "PAYMENT_FAILED" ||
+          orderSession.status === "DUAL_RESERVATION_RELEASED" ||
+          orderSession.status === "REFUNDED"
+        ) {
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Illegal state transition from terminal state '${orderSession.status}' to 'PAYMENT_AUTHORIZED'`,
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_AUTHORIZED'`,
+          };
+        }
+
+        if (orderSession.status === "PAYMENT_AUTHORIZED" || orderSession.status === "PAYMENT_CAPTURED") {
+          if (inTx) this.db.exec("COMMIT;");
+          return { status: "DUPLICATE_IGNORED", message: `Order is already ${orderSession.status}` };
+        }
+
+        this.db
+          .prepare("UPDATE order_sessions SET status = 'PAYMENT_AUTHORIZED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
+          .run(paymentId || null, Date.now(), intentId);
+
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_AUTHORIZED", orderSession.status, "PAYMENT_AUTHORIZED", {
+          eventId,
+          orderId,
+          paymentId,
+        });
+
+        this.db
+          .prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+      } else if (eventPayload.event === "payment.failed") {
+        if (orderSession.status === "PAYMENT_CAPTURED" || orderSession.status === "REFUNDED") {
+          this.audit.logTransition(
+            intentId,
+            "ILLEGAL_STATE_TRANSITION_BLOCKED",
+            orderSession.status,
+            orderSession.status,
+            {
+              eventId,
+              orderId,
+              paymentId,
+              attemptedEvent: eventPayload.event,
+              reason: `Cannot fail payment when order session is already '${orderSession.status}'`,
+            }
+          );
+          if (inTx) this.db.exec("COMMIT;");
+          return {
+            status: "ERROR",
+            message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_FAILED'`,
+          };
+        }
+
+        if (orderSession.status === "PAYMENT_FAILED") {
+          if (inTx) this.db.exec("COMMIT;");
+          return { status: "DUPLICATE_IGNORED", message: "Order is already PAYMENT_FAILED" };
+        }
+
+        this.db
+          .prepare("UPDATE order_sessions SET status = 'PAYMENT_FAILED', updated_at = ? WHERE intent_id = ?")
+          .run(Date.now(), intentId);
+
+        // Commit transaction before releaseReservation because releaseReservation starts its own BEGIN IMMEDIATE TRANSACTION
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
+
+        this.reservationEngine.releaseReservation(orderSession.reservation_id, "Payment failed at bank rail");
+
+        this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_FAILED", orderSession.status, "DUAL_RESERVATION_RELEASED", {
+          eventId,
+          orderId,
+          paymentId,
+        });
+
+        this.db
+          .prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+      } else {
+        // Unknown or unhandled event recorded for audit/dedup
+        this.db
+          .prepare(`
+            INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json, payload_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload), payloadHash);
+
+        if (inTx) {
+          this.db.exec("COMMIT;");
+          inTx = false;
+        }
       }
 
-      // Invariant: Verify underlying reservation is still HELD and commit it
-      const committed = this.reservationEngine.commitReservation(orderSession.reservation_id);
-      if (!committed) {
-        this.audit.logTransition(
-          intentId,
-          "RESERVATION_COMMIT_FAILED",
-          orderSession.status,
-          orderSession.status,
-          {
-            reservationId: orderSession.reservation_id,
-            reason: `Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Cannot capture payment: Underlying reservation '${orderSession.reservation_id}' is not in HELD status`,
-        };
+      return { status: "PROCESSED" };
+    } catch (err) {
+      if (inTx) {
+        try {
+          this.db.exec("ROLLBACK;");
+        } catch (_) {}
       }
-
-      // Valid transition from ORDER_CREATED or PAYMENT_AUTHORIZED with committed reservation
-      this.db
-        .prepare("UPDATE order_sessions SET status = 'PAYMENT_CAPTURED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
-        .run(paymentId || null, Date.now(), intentId);
-
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_CAPTURED", orderSession.status, "PAYMENT_CAPTURED", {
-        eventId,
-        orderId,
-        paymentId,
-      });
-
-      await this.triggerFulfillment(intentId, orderSession.reservation_id, paymentId || "");
-    } else if (eventPayload.event === "payment.authorized") {
-      if (
-        orderSession.status === "PAYMENT_FAILED" ||
-        orderSession.status === "DUAL_RESERVATION_RELEASED" ||
-        orderSession.status === "REFUNDED"
-      ) {
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Illegal state transition from terminal state '${orderSession.status}' to 'PAYMENT_AUTHORIZED'`,
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_AUTHORIZED'`,
-        };
-      }
-
-      if (orderSession.status === "PAYMENT_AUTHORIZED" || orderSession.status === "PAYMENT_CAPTURED") {
-        return { status: "DUPLICATE_IGNORED", message: `Order is already ${orderSession.status}` };
-      }
-
-      this.db
-        .prepare("UPDATE order_sessions SET status = 'PAYMENT_AUTHORIZED', razorpay_payment_id = ?, updated_at = ? WHERE intent_id = ?")
-        .run(paymentId || null, Date.now(), intentId);
-
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_AUTHORIZED", orderSession.status, "PAYMENT_AUTHORIZED", {
-        eventId,
-        orderId,
-        paymentId,
-      });
-    } else if (eventPayload.event === "payment.failed") {
-      if (orderSession.status === "PAYMENT_CAPTURED" || orderSession.status === "REFUNDED") {
-        this.audit.logTransition(
-          intentId,
-          "ILLEGAL_STATE_TRANSITION_BLOCKED",
-          orderSession.status,
-          orderSession.status,
-          {
-            eventId,
-            orderId,
-            paymentId,
-            attemptedEvent: eventPayload.event,
-            reason: `Cannot fail payment when order session is already '${orderSession.status}'`,
-          }
-        );
-        return {
-          status: "ERROR",
-          message: `Illegal state transition: Order session is '${orderSession.status}', cannot transition to 'PAYMENT_FAILED'`,
-        };
-      }
-
-      if (orderSession.status === "PAYMENT_FAILED") {
-        return { status: "DUPLICATE_IGNORED", message: "Order is already PAYMENT_FAILED" };
-      }
-
-      this.db
-        .prepare("UPDATE order_sessions SET status = 'PAYMENT_FAILED', updated_at = ? WHERE intent_id = ?")
-        .run(Date.now(), intentId);
-
-      this.reservationEngine.releaseReservation(orderSession.reservation_id, "Payment failed at bank rail");
-
-      this.audit.logTransition(intentId, "WEBHOOK_PAYMENT_FAILED", orderSession.status, "DUAL_RESERVATION_RELEASED", {
-        eventId,
-        orderId,
-        paymentId,
-      });
+      throw err;
     }
-
-    // 4. Record Event ID in Deduplication Table
-    this.db
-      .prepare(`
-        INSERT INTO processed_webhook_events (event_id, event_type, order_id, payment_id, processed_at, payload_json)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `)
-      .run(eventId, eventPayload.event, orderId || null, paymentId || null, Date.now(), JSON.stringify(eventPayload));
-
-    return { status: "PROCESSED" };
   }
 
   private async triggerFulfillment(intentId: string, reservationId: string, paymentId: string): Promise<void> {
@@ -281,14 +361,35 @@ export class RazorpayWebhookProcessor {
 
     if (!session || !session.razorpay_payment_id) return;
 
+    // RF-04: Only PAYMENT_CAPTURED orders can be refunded. Reject pre-capture or already refunded sessions.
+    if (session.status !== "PAYMENT_CAPTURED") {
+      this.audit.logTransition(
+        intentId,
+        "REFUND_BLOCKED_INVALID_STATUS",
+        session.status,
+        session.status,
+        {
+          reason,
+          currentStatus: session.status,
+          message: `Cannot issue refund for session in status '${session.status}'. Only PAYMENT_CAPTURED orders can be refunded.`,
+        }
+      );
+      return;
+    }
+
     this.audit.logTransition(intentId, "FULFILLMENT_FAILED", session.status, "FULFILLMENT_FAILED", {
       reason,
       paymentId: session.razorpay_payment_id,
     });
 
     if (this.policy.auto_refund_on_fulfillment_failure) {
-      const refundIdempotencyKey = `rfnd_${intentId}_${Date.now()}`;
+      // Deterministic idempotency key ensuring retries deduplicate at bank rails (RF-04)
+      const refundIdempotencyKey = `rfnd_${intentId}_fulfillment_failure`;
       
+      this.db
+        .prepare("UPDATE order_sessions SET status = 'REFUND_PENDING', updated_at = ? WHERE intent_id = ?")
+        .run(Date.now(), intentId);
+
       this.audit.logTransition(intentId, "REFUND_PENDING", "FULFILLMENT_FAILED", "REFUND_PENDING", {
         refundIdempotencyKey,
         amount: Number(session.amount),
@@ -305,9 +406,26 @@ export class RazorpayWebhookProcessor {
         .prepare("UPDATE order_sessions SET status = 'REFUNDED', updated_at = ? WHERE intent_id = ?")
         .run(Date.now(), intentId);
 
+      // Restore the buyer mandate's remaining budget upon successful refund (RF-04)
+      let restoredMandateId: string | null = null;
+      if (session.reservation_id) {
+        const reservation = this.db
+          .prepare("SELECT mandate_id FROM reservations WHERE reservation_id = ?")
+          .get(session.reservation_id) as { mandate_id: string } | undefined;
+
+        if (reservation?.mandate_id) {
+          this.db
+            .prepare("UPDATE buyer_mandates SET remaining_budget = remaining_budget + ? WHERE mandate_id = ?")
+            .run(Number(session.amount), reservation.mandate_id);
+          restoredMandateId = reservation.mandate_id;
+        }
+      }
+
       this.audit.logTransition(intentId, "REFUND_PROCESSED", "REFUND_PENDING", "REFUNDED", {
         refundId: refundResult.id,
         status: refundResult.status,
+        restoredMandateId,
+        amountRestored: Number(session.amount),
       });
     } else {
       this.db

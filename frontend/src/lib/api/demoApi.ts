@@ -1,4 +1,4 @@
-import { apiClient, type ApiClient } from "./apiClient.js";
+import { apiClient, type ApiClient, ApiError } from "./apiClient.js";
 import type { DemoScenarioType, DemoScenarioResult } from "./types.js";
 
 export class DemoApi {
@@ -8,7 +8,20 @@ export class DemoApi {
    * Executes a real deterministic backend scenario on the gateway.
    */
   public async runScenario(scenario: DemoScenarioType): Promise<DemoScenarioResult> {
-    return this.client.post<DemoScenarioResult>("/dashboard/demo/run-scenario", { scenario });
+    try {
+      return await this.client.post<DemoScenarioResult>("/dashboard/demo/run-scenario", { scenario });
+    } catch (err: any) {
+      if (err instanceof ApiError && err.errorCode && err.errorCode !== 'FORBIDDEN') {
+        return {
+          scenario,
+          status: 'BLOCKED',
+          error: err.errorCode,
+          message: err.message,
+          ...(err.details || {}),
+        } as DemoScenarioResult;
+      }
+      throw err;
+    }
   }
 
   /**

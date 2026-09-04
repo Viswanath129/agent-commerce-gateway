@@ -341,7 +341,23 @@ export function registerGatewayRoutes(
     };
   });
 
-  app.post("/dashboard/compatibility/test-adapter", async (request: FastifyRequest, reply: FastifyReply) => {
+  function ensureDemoCatalogStock() {
+    try {
+      const mouseStock = db.prepare("SELECT available_stock FROM catalog_items WHERE sku = 'SKU-MOUSE-PRO'").get() as any;
+      if (!mouseStock || Number(mouseStock.available_stock) < 5) {
+        db.prepare("UPDATE catalog_items SET available_stock = 15 WHERE sku = 'SKU-MOUSE-PRO'").run();
+      }
+      const chairStock = db.prepare("SELECT available_stock FROM catalog_items WHERE sku = 'SKU-CHAIR-ERGO'").get() as any;
+      if (!chairStock || Number(chairStock.available_stock) < 3) {
+        db.prepare("UPDATE catalog_items SET available_stock = 5 WHERE sku = 'SKU-CHAIR-ERGO'").run();
+      }
+    } catch {
+      // In-memory or custom db fallback
+    }
+  }
+
+  app.post("/dashboard/compatibility/test-adapter", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    ensureDemoCatalogStock();
     const { protocol } = (request.body || {}) as { protocol: string };
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1000);
@@ -474,7 +490,8 @@ export function registerGatewayRoutes(
     return reply.status(res.statusCode).send(JSON.parse(res.body));
   });
 
-  app.post("/dashboard/demo/run-scenario", async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post("/dashboard/demo/run-scenario", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    ensureDemoCatalogStock();
     const { scenario } = (request.body || {}) as { scenario: string };
     const keypair = generatePrincipalKeypair();
     const now = Math.floor(Date.now() / 1000);
@@ -723,6 +740,30 @@ export function registerGatewayRoutes(
       });
     }
 
+    // Validate Intent Timestamp (RF-09)
+    const intentTimeSec = intent.timestamp > 1e11 ? Math.floor(intent.timestamp / 1000) : intent.timestamp;
+    if (Math.abs(Math.floor(Date.now() / 1000) - intentTimeSec) > 300) {
+      return reply.status(400).send({
+        error: "INTENT_EXPIRED",
+        message: `Intent timestamp '${intent.timestamp}' is outside the valid 300-second window.`,
+      });
+    }
+
+    // Check for Nonce Replay (RF-09)
+    const existingNonce = db.prepare("SELECT client_nonce FROM used_nonces WHERE client_nonce = ? AND mandate_id = ?").get(intent.client_nonce, intent.mandate.mandate_id);
+    if (existingNonce) {
+      return reply.status(409).send({
+        error: "DUPLICATE_NONCE_REPLAY",
+        message: `Client nonce '${intent.client_nonce}' has already been used for mandate '${intent.mandate.mandate_id}'.`,
+      });
+    }
+
+    db.prepare("INSERT INTO used_nonces (client_nonce, mandate_id, used_at) VALUES (?, ?, ?)").run(
+      intent.client_nonce,
+      intent.mandate.mandate_id,
+      Date.now()
+    );
+
     auditLedger.logTransition(intentId, "INTENT_RECEIVED", null, "INTENT_RECEIVED", {
       client_nonce: intent.client_nonce,
       mandate_id: intent.mandate.mandate_id,
@@ -886,6 +927,10 @@ export function registerGatewayRoutes(
         now
       );
 
+      // Record spend & velocity (RF-06 & SEC-11)
+      budgetEngine.recordSpend(activePolicy.merchant_id, agentId, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", agentId, truthResult.totalAmount);
+
       // Record in Revenue Attribution
       try {
         const baseAmount = truthResult.resolvedItems.length > 0 ? truthResult.resolvedItems[0].total : truthResult.totalAmount;
@@ -977,6 +1022,30 @@ export function registerGatewayRoutes(
       });
     }
 
+    // Validate Intent Timestamp (RF-09)
+    const intentTimeSec = intent.timestamp > 1e11 ? Math.floor(intent.timestamp / 1000) : intent.timestamp;
+    if (Math.abs(Math.floor(Date.now() / 1000) - intentTimeSec) > 300) {
+      return reply.status(400).send({
+        error: "INTENT_EXPIRED",
+        message: `Intent timestamp '${intent.timestamp}' is outside the valid 300-second window.`,
+      });
+    }
+
+    // Check for Nonce Replay (RF-09)
+    const existingNonce = db.prepare("SELECT client_nonce FROM used_nonces WHERE client_nonce = ? AND mandate_id = ?").get(intent.client_nonce, intent.mandate.mandate_id);
+    if (existingNonce) {
+      return reply.status(409).send({
+        error: "DUPLICATE_NONCE_REPLAY",
+        message: `Client nonce '${intent.client_nonce}' has already been used for mandate '${intent.mandate.mandate_id}'.`,
+      });
+    }
+
+    db.prepare("INSERT INTO used_nonces (client_nonce, mandate_id, used_at) VALUES (?, ?, ?)").run(
+      intent.client_nonce,
+      intent.mandate.mandate_id,
+      Date.now()
+    );
+
     auditLedger.logTransition(intentId, "INTENT_RECEIVED", null, "INTENT_RECEIVED", {
       client_nonce: intent.client_nonce,
       mandate_id: intent.mandate.mandate_id,
@@ -986,56 +1055,73 @@ export function registerGatewayRoutes(
       raw_hash: adapterResult.metadata.rawHash,
     });
 
-    // Check Kill Switch
-    const ks = killSwitchEngine.checkKillSwitch(activePolicy.merchant_id, adapterResult.metadata.agentId);
-    if (ks.isPaused) {
-      auditLedger.logTransition(intentId, "KILL_SWITCH_BLOCKED", "INTENT_RECEIVED", "INTENT_REJECTED", { reason: ks.reason });
-      return reply.status(403).send({ error: "KILL_SWITCH_ENGAGED", message: ks.reason });
+    // Authoritative Policy Decision Point (PDP) Evaluation (RF-01)
+    const explicitAgentId = (request.headers["x-agent-id"] as string) || (request.body as any)?.agent_id || (request.body as any)?.params?.arguments?.agent_metadata?.agent_id;
+    const agentId = explicitAgentId || (adapterResult.metadata.agentId && principalRegistry.getPrincipal(adapterResult.metadata.agentId) ? adapterResult.metadata.agentId : "native-llm-agent");
+    const pdpRes = pdp.evaluateIntent(intent, activePolicy, agentId);
+
+    if (pdpRes.decision.decision === "DENY") {
+      const code = pdpRes.decision.reason_code;
+      const evidence = pdpRes.decision.authorization_evidence || {};
+      let message = evidence.truth_error || evidence.reason || `Policy Decision Point rejected intent: ${code}`;
+      if (code === "MANDATE_REVOKED" && evidence.reason) {
+        message = `Buyer mandate '${intent.mandate.mandate_id}' was revoked by principal: ${evidence.reason}`;
+      }
+
+      if (code === "MANDATE_REVOKED") {
+        auditLedger.logTransition(intentId, "MANDATE_REVOKED", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          mandate_id: intent.mandate.mandate_id,
+          reason: evidence.reason,
+          policy_version: activePolicy.policy_version,
+        });
+      } else if (code.includes("POLICY") || code === "MERCHANT_MAX_AMOUNT_EXCEEDED" || code === "CATEGORY_NOT_WHITELISTED") {
+        auditLedger.logTransition(intentId, "POLICY_VIOLATION", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          reason: evidence.reason || code,
+          code,
+          policy_version: activePolicy.policy_version,
+        });
+      } else {
+        auditLedger.logTransition(intentId, "PDP_DECISION_DENIED", "INTENT_RECEIVED", "INTENT_REJECTED", {
+          reason: code,
+          agentId,
+          decisionId: pdpRes.decision.decision_id,
+          policy_version: activePolicy.policy_version,
+        });
+      }
+
+      let httpStatus = 403;
+      if (code === "INVALID_MANDATE_SIGNATURE") httpStatus = 401;
+      else if (code === "COMMERCE_TRUTH_REJECTION" || code === "INVALID_INTENT_SCHEMA") httpStatus = 400;
+      else if (code === "MANDATE_EXHAUSTED" || code === "RESERVATION_FAILED" || code.includes("STOCKOUT")) httpStatus = 409;
+
+      return reply.status(httpStatus).send({
+        error: code,
+        message,
+        decision_id: pdpRes.decision.decision_id,
+      });
     }
 
-    // Check Mandate Revocation in Control Plane
-    const revokedRow = db.prepare("SELECT * FROM revoked_mandates WHERE mandate_id = ?").get(intent.mandate.mandate_id) as any;
-    if (revokedRow) {
-      auditLedger.logTransition(intentId, "MANDATE_REVOKED", "INTENT_RECEIVED", "INTENT_REJECTED", {
-        mandate_id: intent.mandate.mandate_id,
-        revoked_at: revokedRow.revoked_at,
-        reason: revokedRow.revocation_reason,
+    if (pdpRes.decision.decision === "REQUIRE_CONFIRMATION") {
+      auditLedger.logTransition(intentId, "REQUIRE_CONFIRMATION", "INTENT_RECEIVED", "INTENT_VALIDATED", {
+        decisionId: pdpRes.decision.decision_id,
+        confirmationToken: pdpRes.decision.resource_decision.confirmation_token,
       });
-      return reply.status(403).send({
-        error: "MANDATE_REVOKED",
-        message: `Buyer mandate '${intent.mandate.mandate_id}' was revoked by principal: ${revokedRow.revocation_reason}`,
+      return reply.status(202).send({
+        status: "REQUIRE_CONFIRMATION",
+        decision_id: pdpRes.decision.decision_id,
+        confirmation_token: pdpRes.decision.resource_decision.confirmation_token,
+        amount_paise: pdpRes.truthResult?.totalAmount,
+        reason: "Amount exceeds autonomous agent confirmation ceiling",
       });
     }
 
-    // Cryptographic Identity & Mandate Verification (Ed25519)
-    const isSignatureValid = verifyMandateSignature(intent.mandate);
-    if (!isSignatureValid) {
-      auditLedger.logTransition(intentId, "SIGNATURE_VERIFICATION_FAILED", "INTENT_RECEIVED", "INTENT_REJECTED", {
-        reason: "Invalid Ed25519 signature on buyer mandate payload",
-      });
-      return reply.status(401).send({
-        error: "INVALID_MANDATE_SIGNATURE",
-        message: "The cryptographic signature on the buyer mandate is invalid or tampered.",
-      });
-    }
+    const truthResult = pdpRes.truthResult!;
 
     auditLedger.logTransition(intentId, "MANDATE_VERIFIED", "INTENT_RECEIVED", "INTENT_VALIDATED", {
       principal_public_key: intent.mandate.principal_public_key,
       budget_limit: intent.mandate.budget_limit,
       protocol: adapterResult.metadata.sourceProtocol,
     });
-
-    // Commerce Truth Lookup
-    const truthResult = truthEngine.resolveTruth(intent.proposed_items);
-    if (!truthResult.isValid) {
-      auditLedger.logTransition(intentId, "COMMERCE_TRUTH_FAILED", "INTENT_VALIDATED", "INTENT_REJECTED", {
-        reason: truthResult.error,
-      });
-      return reply.status(400).send({
-        error: "COMMERCE_TRUTH_REJECTION",
-        message: truthResult.error,
-      });
-    }
 
     auditLedger.logTransition(intentId, "COMMERCE_TRUTH_RESOLVED", "INTENT_VALIDATED", "INTENT_VALIDATED", {
       computedTotalPaise: truthResult.totalAmount,
@@ -1048,28 +1134,10 @@ export function registerGatewayRoutes(
       })),
     });
 
-    // Merchant Policy Evaluation
-    const policyResult = policyEngine.evaluate(
-      intent.mandate,
-      truthResult.totalAmount,
-      truthResult.categories,
-      activePolicy.merchant_id
-    );
-
-    if (!policyResult.isAllowed) {
-      auditLedger.logTransition(intentId, "POLICY_VIOLATION", "INTENT_VALIDATED", "INTENT_REJECTED", {
-        reason: policyResult.reason,
-        code: policyResult.violationCode,
-        policy_version: policyResult.policy_version,
-      });
-      return reply.status(403).send({
-        error: policyResult.violationCode,
-        message: policyResult.reason,
-      });
-    }
-
     auditLedger.logTransition(intentId, "POLICY_EVALUATED_ALLOWED", "INTENT_VALIDATED", "INTENT_VALIDATED", {
-      policy_version: policyResult.policy_version,
+      policy_version: activePolicy.policy_version,
+      effective_at: activePolicy.effective_at,
+      decision_timestamp: Math.floor(Date.now() / 1000),
     });
 
     // Dual-Resource Atomic Reservation
@@ -1104,7 +1172,7 @@ export function registerGatewayRoutes(
       currency: "INR",
       itemCategories: truthResult.categories,
       mandateId: intent.mandate.mandate_id,
-      agentId: adapterResult.metadata.agentId,
+      agentId: agentId,
       protocol: adapterResult.metadata.sourceProtocol,
     });
 
@@ -1145,6 +1213,10 @@ export function registerGatewayRoutes(
         now
       );
 
+      // Record spend & velocity (RF-01 & RF-06 & SEC-11)
+      budgetEngine.recordSpend(activePolicy.merchant_id, agentId, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", agentId, truthResult.totalAmount);
+
       auditLedger.logTransition(intentId, "RAZORPAY_ORDER_CREATED", "DUAL_RESERVATION_HELD", "ORDER_CREATED", {
         razorpayOrderId: razorpayOrder.id,
         receipt: razorpayOrder.receipt,
@@ -1161,7 +1233,7 @@ export function registerGatewayRoutes(
         policy_version: activePolicy.policy_version,
         reservation_id: reservationResult.reservationId,
         ingress_protocol: adapterResult.metadata.sourceProtocol,
-        agent_id: adapterResult.metadata.agentId,
+        agent_id: agentId,
         payment_intelligence: {
           provider: vulcanResult.provider,
           risk_score: vulcanResult.riskSignals.riskScore,
@@ -1372,6 +1444,10 @@ export function registerGatewayRoutes(
         nowMs
       );
 
+      // Record spend & velocity (RF-06 & SEC-11)
+      budgetEngine.recordSpend(policy.merchant_id, pending.agent_id, truthResult.totalAmount);
+      velocityEngine.recordAction("AGENT", pending.agent_id, truthResult.totalAmount);
+
       auditLedger.logTransition(intent.intent_id, "CONFIRMED_ORDER_CREATED", "DUAL_RESERVATION_HELD", "ORDER_CREATED", {
         razorpayOrderId: razorpayOrder.id,
         confirmedBy,
@@ -1401,10 +1477,31 @@ export function registerGatewayRoutes(
     return { agents: principalRegistry.listPrincipals() };
   });
 
-  app.post("/v1/agents", async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post("/v1/agents", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as any;
     if (!body || !body.agent_id) {
       return reply.status(400).send({ error: "MISSING_AGENT_ID", message: "agent_id is required" });
+    }
+
+    // RF-02: Prevent unauthorized modification or un-suspension of existing agents
+    const existing = principalRegistry.getPrincipal(body.agent_id);
+    if (existing) {
+      const isAuth = (request as any).merchantAuthScopes?.includes("merchant:write");
+      if (!isAuth) {
+        return reply.status(403).send({
+          error: "FORBIDDEN",
+          message: "Modifying existing agent principals requires authenticated merchant:write scope.",
+        });
+      }
+      if (existing.status === "SUSPENDED" || existing.status === "REVOKED") {
+        const hasOverride = body.explicit_override === true || body.override_suspension === true;
+        if (!hasOverride) {
+          return reply.status(403).send({
+            error: "FORBIDDEN",
+            message: `Cannot reactivate ${existing.status.toLowerCase()} agent '${body.agent_id}' without explicit override.`,
+          });
+        }
+      }
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -1717,6 +1814,13 @@ export function registerGatewayRoutes(
     const now = Math.floor(Date.now() / 1000);
 
     if (existing) {
+      if (existing.principal_public_key !== mandate.principal_public_key) {
+        return reply.status(403).send({
+          error: "MANDATE_KEY_MISMATCH",
+          message: "Cannot update mandate registered to a different principal public key",
+        });
+      }
+
       // Preserve remaining_budget strictly; never reset spent funds on re-registration
       db.prepare(`
         UPDATE buyer_mandates SET
@@ -1845,7 +1949,7 @@ export function registerGatewayRoutes(
     return { tools: mcpSurface.listTools() };
   });
 
-  app.post("/v1/mcp/call", async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post("/v1/mcp/call", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = (request.body || {}) as { name: string; arguments: any };
     if (!body.name) {
       return reply.status(400).send({ error: "MISSING_TOOL_NAME", message: "name is required" });
@@ -1949,7 +2053,7 @@ export function registerGatewayRoutes(
     return reply.status(200).send({ candidateCrossSells: crossSells });
   });
 
-  app.post("/v1/commerce/cross-sell/action", async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post("/v1/commerce/cross-sell/action", { preHandler: [requireScope("merchant:write", { allowUnauthenticatedInDev: true })] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = (request.body || {}) as {
       session_id?: string;
       action: "ACCEPT" | "REJECT";

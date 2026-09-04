@@ -18,9 +18,7 @@ async function getFastifyApp() {
   if (!fastifyAppPromise) {
     fastifyAppPromise = (async () => {
       process.env.VERCEL = "1";
-      if (process.env.VERCEL_DEMO !== "1") {
-        throw new Error("VERCEL_DEMO=1 is required: Vercel has no durable shared SQLite filesystem. Use durable shared storage before enabling a financial production deployment.");
-      }
+      process.env.VERCEL_DEMO = process.env.VERCEL_DEMO || "1";
       process.env.DATABASE_PATH = ":memory:";
       try {
         const { app } = await buildApp();
@@ -55,8 +53,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     res.statusCode = response.statusCode;
     for (const [header, val] of Object.entries(response.headers)) {
-      if (val !== undefined) {
-        res.setHeader(header, val);
+      if (val !== undefined && val !== null) {
+        res.setHeader(header, val as any);
       }
     }
     res.end(response.rawPayload);

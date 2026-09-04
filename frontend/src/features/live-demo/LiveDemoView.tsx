@@ -72,21 +72,44 @@ export const LiveDemoView: React.FC<LiveDemoViewProps> = ({
           { time: timeNow(), text: 'EXECUTION HALTED. Razorpay settlement rails were NOT invoked.', type: 'warn' },
         ]);
       } else if (res.scenario === 'concurrent') {
-        setStages([
-          { id: 'intent', name: 'INTENT', desc: 'Dual Parallel Ingress', status: 'success', detail: '2 INGRESS THREADS' },
-          { id: 'mandate', name: 'MANDATE', desc: 'Shared Remaining Budget', status: 'success', detail: '₹2,876.00 REMAINING' },
-          { id: 'truth', name: 'TRUTH', desc: 'Catalog Price Lookup', status: 'success', detail: '2x ₹2,124.00' },
-          { id: 'policy', name: 'POLICY', desc: 'Merchant Limits', status: 'success', detail: 'ALLOWED' },
-          { id: 'reserve', name: 'RESERVE', desc: 'Dual-Resource Lock', status: 'success', detail: '1 ADMIT / 1 BLOCK' },
-          { id: 'razorpay', name: 'RAZORPAY', desc: 'Rail Order Creation', status: 'success', detail: '1 ORDER CREATED' },
-          { id: 'audit', name: 'AUDIT', desc: 'SHA-256 Block Commit', status: 'success', detail: '2 BLOCKS CHAINED' },
-        ]);
+        const subAStatus = res.subagentA?.status;
+        const subBStatus = res.subagentB?.status;
+        const subASuccess = subAStatus === 201 || subAStatus === 200;
+        const subBSuccess = subBStatus === 201 || subBStatus === 200;
+        const hasAdmitted = subASuccess || subBSuccess;
+        const hasBlocked = (subAStatus !== undefined && subAStatus >= 400) || (subBStatus !== undefined && subBStatus >= 400);
 
-        setLogs((prev) => [
-          ...prev,
-          { time: timeNow(), text: `CONCURRENCY RACE: Subagent A -> HTTP ${res.subagentA?.status} (ORDER_CREATED)`, type: 'success' },
-          { time: timeNow(), text: `CONCURRENCY RACE: Subagent B -> HTTP ${res.subagentB?.status} (${(res.subagentB?.body as any)?.error || 'MANDATE_EXHAUSTED'})`, type: 'error' },
-        ]);
+        if (hasAdmitted && hasBlocked) {
+          setStages([
+            { id: 'intent', name: 'INTENT', desc: 'Dual Parallel Ingress', status: 'success', detail: '2 INGRESS THREADS' },
+            { id: 'mandate', name: 'MANDATE', desc: 'Shared Remaining Budget', status: 'success', detail: '₹2,876.00 REMAINING' },
+            { id: 'truth', name: 'TRUTH', desc: 'Catalog Price Lookup', status: 'success', detail: '2x ₹2,124.00' },
+            { id: 'policy', name: 'POLICY', desc: 'Merchant Limits', status: 'success', detail: 'ALLOWED' },
+            { id: 'reserve', name: 'RESERVE', desc: 'Dual-Resource Lock', status: 'success', detail: '1 ADMIT / 1 BLOCK' },
+            { id: 'razorpay', name: 'RAZORPAY', desc: 'Rail Order Creation', status: 'success', detail: '1 ORDER CREATED' },
+            { id: 'audit', name: 'AUDIT', desc: 'SHA-256 Block Commit', status: 'success', detail: '2 BLOCKS CHAINED' },
+          ]);
+        } else {
+          setStages([
+            { id: 'intent', name: 'INTENT', desc: 'Dual Parallel Ingress', status: 'success', detail: '2 INGRESS THREADS' },
+            { id: 'mandate', name: 'MANDATE', desc: 'Shared Remaining Budget', status: 'success', detail: '₹2,876.00 REMAINING' },
+            { id: 'truth', name: 'TRUTH', desc: 'Catalog Price Lookup', status: subASuccess || subBSuccess ? 'success' : 'blocked', detail: (res.subagentA?.body as any)?.error || (res.subagentB?.body as any)?.error || 'EVALUATED' },
+            { id: 'policy', name: 'POLICY', desc: 'Merchant Limits', status: hasAdmitted ? 'success' : 'blocked', detail: hasAdmitted ? 'ALLOWED' : 'BLOCKED' },
+            { id: 'reserve', name: 'RESERVE', desc: 'Dual-Resource Lock', status: hasAdmitted ? 'success' : 'blocked', detail: hasAdmitted ? 'SERIALIZED' : 'FAILED' },
+            { id: 'razorpay', name: 'RAZORPAY', desc: 'Rail Order Creation', status: hasAdmitted ? 'success' : 'idle', detail: hasAdmitted ? 'ORDER CREATED' : 'NOT INVOKED' },
+            { id: 'audit', name: 'AUDIT', desc: 'SHA-256 Block Commit', status: 'success', detail: 'CHAINED' },
+          ]);
+        }
+
+        const logA = subASuccess
+          ? { time: timeNow(), text: `CONCURRENCY RACE: Subagent A -> HTTP ${subAStatus} (ORDER_CREATED)`, type: 'success' as const }
+          : { time: timeNow(), text: `CONCURRENCY RACE: Subagent A -> HTTP ${subAStatus} (${(res.subagentA?.body as any)?.error || 'BLOCKED'})`, type: 'error' as const };
+
+        const logB = subBSuccess
+          ? { time: timeNow(), text: `CONCURRENCY RACE: Subagent B -> HTTP ${subBStatus} (ORDER_CREATED)`, type: 'success' as const }
+          : { time: timeNow(), text: `CONCURRENCY RACE: Subagent B -> HTTP ${subBStatus} (${(res.subagentB?.body as any)?.error || 'MANDATE_EXHAUSTED'})`, type: 'error' as const };
+
+        setLogs((prev) => [...prev, logA, logB]);
       } else {
         const orderId = res.razorpay_order_id || (res.orderCreated as any)?.razorpay_order_id || 'CREATED';
         setStages([
@@ -312,14 +335,22 @@ export const LiveDemoView: React.FC<LiveDemoViewProps> = ({
                 ) : lastResult.scenario === 'concurrent' ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-3 bg-[#6F9B83]/15 border border-[#6F9B83]/40 rounded-lg">
-                        <span className="text-[#6F9B83] font-bold block uppercase text-[9px] tracking-wider">Subagent A</span>
-                        <div className="text-[#F4F0E6] font-medium mt-0.5">HTTP {lastResult.subagentA?.status} (Admitted)</div>
-                      </div>
-                      <div className="p-3 bg-[#A76565]/15 border border-[#A76565]/40 rounded-lg">
-                        <span className="text-[#A76565] font-bold block uppercase text-[9px] tracking-wider">Subagent B</span>
-                        <div className="text-[#F4F0E6] font-medium mt-0.5">HTTP {lastResult.subagentB?.status} (Blocked)</div>
-                      </div>
+                      {(() => {
+                        const subASuccess = lastResult.subagentA?.status === 201 || lastResult.subagentA?.status === 200;
+                        const subBSuccess = lastResult.subagentB?.status === 201 || lastResult.subagentB?.status === 200;
+                        return (
+                          <>
+                            <div className={`p-3 border rounded-lg ${subASuccess ? 'bg-[#6F9B83]/15 border-[#6F9B83]/40' : 'bg-[#A76565]/15 border-[#A76565]/40'}`}>
+                              <span className={`${subASuccess ? 'text-[#6F9B83]' : 'text-[#A76565]'} font-bold block uppercase text-[9px] tracking-wider`}>Subagent A</span>
+                              <div className="text-[#F4F0E6] font-medium mt-0.5">HTTP {lastResult.subagentA?.status} ({subASuccess ? 'Admitted' : 'Blocked'})</div>
+                            </div>
+                            <div className={`p-3 border rounded-lg ${subBSuccess ? 'bg-[#6F9B83]/15 border-[#6F9B83]/40' : 'bg-[#A76565]/15 border-[#A76565]/40'}`}>
+                              <span className={`${subBSuccess ? 'text-[#6F9B83]' : 'text-[#A76565]'} font-bold block uppercase text-[9px] tracking-wider`}>Subagent B</span>
+                              <div className="text-[#F4F0E6] font-medium mt-0.5">HTTP {lastResult.subagentB?.status} ({subBSuccess ? 'Admitted' : 'Blocked'})</div>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="text-[11px] text-[#BCB7AB] font-ui font-light">
                       Dual-Resource ACID lock serialized requests and strictly protected remaining ₹2,876.00 balance.

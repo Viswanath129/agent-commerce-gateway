@@ -374,7 +374,21 @@ export class PolicyDecisionPoint {
     }
     stages.push({ stage: "AGENT_IDENTITY", passed: true, details: { agent_id: principal.agent_id, trust_level: principal.trust_level } });
 
-    // Stage 3: Mandate Cryptographic Signature & Expiry
+    // Stage 3: Mandate Cryptographic Signature, Expiry & Revocation
+    const revokedRow = this.db.prepare("SELECT * FROM revoked_mandates WHERE mandate_id = ?").get(intent.mandate.mandate_id) as any;
+    if (revokedRow) {
+      stages.push({ stage: "MANDATE_REVOCATION", passed: false, error: "Mandate is revoked in merchant registry" });
+      return {
+        simulation_id: simId,
+        verdict: "WOULD_DENY",
+        reason_code: "MANDATE_REVOKED",
+        reason: `Mandate '${intent.mandate.mandate_id}' has been revoked`,
+        policy_version: policy.policy_version,
+        stages,
+        non_mutating: true,
+      };
+    }
+
     if (now > intent.mandate.expiry) {
       stages.push({ stage: "MANDATE_EXPIRY", passed: false, error: "Mandate is temporally expired" });
       return {

@@ -14,7 +14,7 @@ export function getValidTokens(): Record<string, string[]> {
   const viewerToken = process.env.ACG_VIEWER_TOKEN || (!isProd ? "secret_merchant_viewer" : undefined);
   const auditToken = process.env.ACG_AUDIT_TOKEN || (!isProd ? "secret_audit_bot" : undefined);
 
-  const tokenMap: Record<string, string[]> = {};
+  const tokenMap: Record<string, string[]> = Object.create(null);
 
   if (adminToken) {
     tokenMap[adminToken] = [
@@ -39,18 +39,24 @@ export function getValidTokens(): Record<string, string[]> {
   return tokenMap;
 }
 
-export function requireScope(requiredScope: string) {
+export function requireScope(requiredScope: string, options?: { allowUnauthenticatedInDev?: boolean }) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const authHeader = request.headers.authorization;
+    const isProd = process.env.NODE_ENV === "production";
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (!isProd && options?.allowUnauthenticatedInDev) {
+        return;
+      }
       return reply.status(401).send({ error: "UNAUTHORIZED", message: "Missing or invalid Authorization header" });
     }
 
     const token = authHeader.substring(7);
     const validTokens = getValidTokens();
-    const scopes = validTokens[token];
+    const hasToken = Object.prototype.hasOwnProperty.call(validTokens, token);
+    const scopes = hasToken ? validTokens[token] : undefined;
 
-    if (!scopes) {
+    if (!hasToken || !Array.isArray(scopes)) {
       return reply.status(401).send({ error: "UNAUTHORIZED", message: "Invalid credentials" });
     }
 
@@ -62,4 +68,5 @@ export function requireScope(requiredScope: string) {
     (request as any).merchantAuthScopes = scopes;
   };
 }
+
 
