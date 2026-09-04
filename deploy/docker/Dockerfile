@@ -8,6 +8,7 @@ RUN npm ci
 COPY frontend/ ./frontend/
 COPY src/ ./src/
 COPY public/ ./public/
+COPY api/ ./api/
 
 RUN npm run build
 
@@ -18,6 +19,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
+ENV DATABASE_PATH=/app/data/acg_gateway.db
 
 COPY package*.json ./
 RUN npm ci --omit=dev
@@ -25,8 +27,10 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown -R node:node /app
+
+USER node
 
 EXPOSE 3000
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]

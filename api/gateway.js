@@ -48940,7 +48940,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main();
 }
 
-// api/server_entry.ts
+// api/_server_entry.ts
 var fastifyAppPromise = null;
 function requestUrlForGateway(req) {
   const incoming = new URL(req.url || "/", "http://acg.local");
