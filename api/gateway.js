@@ -44112,8 +44112,9 @@ var RazorpayRailClient = class {
     }
     this.keyId = keyId || envId || "rzp_test_mock";
     this.keySecret = keySecret || envSecret || "rzp_secret_mock";
+    const isMock = this.keyId.includes("mock") || this.keyId.includes("placeholder");
     this.isLiveCredentials = Boolean(
-      this.keyId && this.keySecret && this.keyId.startsWith("rzp_live_")
+      this.keyId && this.keySecret && !isMock && (this.keyId.startsWith("rzp_live_") || this.keyId.startsWith("rzp_test_"))
     );
   }
   /**
@@ -48876,6 +48877,14 @@ async function buildApp(customDb, customPolicy) {
     // 1MB body limit
     logger: {
       level: process.env.NODE_ENV === "test" ? "silent" : "info"
+    }
+  });
+  app.addHook("onRequest", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+    reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Agent-ID, X-Signature, X-Razorpay-Signature, X-Razorpay-Event-Id");
+    if (req.method === "OPTIONS") {
+      return reply.status(204).send();
     }
   });
   const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";

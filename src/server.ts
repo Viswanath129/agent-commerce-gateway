@@ -29,6 +29,16 @@ export async function buildApp(customDb?: SqliteDatabase, customPolicy?: Merchan
     },
   });
 
+  // Enable CORS for cross-origin clients (e.g. Firebase frontend talking to Render backend)
+  app.addHook("onRequest", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+    reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Agent-ID, X-Signature, X-Razorpay-Signature, X-Razorpay-Event-Id");
+    if (req.method === "OPTIONS") {
+      return reply.status(204).send();
+    }
+  });
+
   const dbPath = process.env.DATABASE_PATH || "./data/acg_gateway.db";
   const db = customDb || initDatabase(dbPath);
   const policy = customPolicy || defaultPolicy;

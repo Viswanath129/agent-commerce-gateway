@@ -31,7 +31,10 @@ export class ApiClient {
   private defaultAuthToken: string;
 
   constructor(baseUrl: string = '', defaultTimeoutMs: number = 10000, defaultAuthToken: string = '') {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    const envBaseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) ? (import.meta as any).env.VITE_API_BASE_URL : '';
+    const storedBaseUrl = (typeof window !== 'undefined' && window.localStorage) ? (window.localStorage.getItem('acg_api_base_url') || (window as any).__ACG_API_URL__ || '') : '';
+    const resolvedBase = baseUrl || storedBaseUrl || envBaseUrl || '';
+    this.baseUrl = resolvedBase.trim().replace(/\/$/, '');
     this.defaultTimeoutMs = defaultTimeoutMs;
     // Credentials are supplied by the authenticated operator at runtime, never
     // embedded into a Vite build or exposed via VITE_* environment variables.
@@ -56,7 +59,11 @@ export class ApiClient {
   }
 
   public setBaseUrl(url: string): void {
-    this.baseUrl = url.replace(/\/$/, '');
+    this.baseUrl = url.trim().replace(/\/$/, '');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (this.baseUrl) window.localStorage.setItem('acg_api_base_url', this.baseUrl);
+      else window.localStorage.removeItem('acg_api_base_url');
+    }
   }
 
   public getBaseUrl(): string {

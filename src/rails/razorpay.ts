@@ -39,10 +39,12 @@ export class RazorpayRailClient {
 
     this.keyId = keyId || envId || "rzp_test_mock";
     this.keySecret = keySecret || envSecret || "rzp_secret_mock";
+    const isMock = this.keyId.includes("mock") || this.keyId.includes("placeholder");
     this.isLiveCredentials = Boolean(
       this.keyId &&
       this.keySecret &&
-      this.keyId.startsWith("rzp_live_")
+      !isMock &&
+      (this.keyId.startsWith("rzp_live_") || this.keyId.startsWith("rzp_test_"))
     );
   }
 

@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "agent-commerce-gateway",
     "public": "public",
     "ignore": [
       "firebase.json",

@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: agent-commerce-gateway
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: ./data/acg_gateway.db
+      - key: VERCEL_DEMO
+        value: "1"
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: MERCHANT_ID
+        value: merch_acme_electronics_01
